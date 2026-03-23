@@ -1,6 +1,7 @@
 package com.documind.service;
 
 import com.documind.model.Document;
+import com.documind.model.DocumentEmbedding;
 import com.documind.repository.DocumentRepository;
 import com.documind.repository.DocumentEmbeddingRepository;
 
@@ -57,7 +58,7 @@ public class DocumentService {
 
             System.out.println("✅ Document saved ID: " + doc.getId());
 
-            // 2️⃣ Extract text (PDF + DOCX)
+            // 2️⃣ Extract text
             String text = extractText(file);
 
             if (text == null || text.isEmpty()) {
@@ -76,6 +77,8 @@ public class DocumentService {
             for (String chunk : chunks) {
 
                 try {
+                    System.out.println("➡ Processing chunk...");
+
                     var embedding = embeddingService.embed(chunk);
 
                     if (embedding == null || embedding.vector() == null) {
@@ -89,14 +92,15 @@ public class DocumentService {
 
                     String vectorString = convertToVectorString(vector);
 
-                    System.out.println("Saving embedding...");
+                    // ✅ SAVE USING JPA (FIXED)
+                    DocumentEmbedding de = new DocumentEmbedding();
+                    de.setChunkText(chunk);
+                    de.setDocumentId(doc.getId());
+                    de.setEmbedding(vectorString);
 
-                    // 🔥 FIXED INSERT
-                    embeddingRepository.insertEmbedding(
-                            chunk,
-                            doc.getId(),
-                            vectorString
-                    );
+                    embeddingRepository.save(de);
+
+                    System.out.println("🔥 SAVED SUCCESSFULLY");
 
                 } catch (Exception e) {
                     System.out.println("❌ Embedding failed");
