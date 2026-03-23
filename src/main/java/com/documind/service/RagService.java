@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class RagService {
 
-    private final OpenAIEmbeddingService embeddingService; // ✅ UPDATED
+    private final OpenAIEmbeddingService embeddingService;
     private final DocumentEmbeddingRepository embeddingRepository;
     private final ChatHistoryRepository chatHistoryRepository;
     private final UserRepository userRepository;
@@ -39,35 +39,36 @@ public class RagService {
 
         System.out.println("🔥 Chat API called");
 
-        // 1️⃣ Get user
         User user = userRepository.findByUsername(username).orElse(null);
 
         List<String> topChunks;
 
         try {
-            // ✅ Generate embedding
+            // 🔥 Generate embedding
             var embedding = embeddingService.embed(question);
-
             float[] vector = embedding.vector();
 
             System.out.println("VECTOR SIZE: " + vector.length);
 
             String vectorString = convertToVectorString(vector);
 
-            // ✅ Vector search
+            System.out.println("VECTOR SAMPLE: " +
+                    vectorString.substring(0, Math.min(100, vectorString.length())));
+
+            // 🔥 Vector search
             topChunks = embeddingRepository.findTop3SimilarByUser(vectorString);
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Error in vector search";
+            return "❌ Error in vector search: " + e.getMessage();
         }
 
-        // 🚨 EMPTY CHECK
+        // 🚨 No data
         if (topChunks == null || topChunks.isEmpty()) {
             return "⚠ Please upload a document first!";
         }
 
-        // ✅ BUILD CONTEXT (🔥 MOST IMPORTANT FIX)
+        // 🔥 BUILD CONTEXT
         StringBuilder context = new StringBuilder();
 
         for (String chunk : topChunks) {
@@ -76,7 +77,7 @@ public class RagService {
 
         System.out.println("📄 CONTEXT:\n" + context);
 
-        // ✅ PROMPT
+        // 🔥 PROMPT
         String prompt =
                 """
                 You are DocuMind AI.
@@ -85,7 +86,7 @@ public class RagService {
                 - Answer clearly in bullet points
                 - Use only the provided context
                 - Do not mention sources
-                - If answer not found, say: Not found in document
+                - If not found, say: Not found in document
 
                 Context:
                 """ + context +
@@ -93,10 +94,10 @@ public class RagService {
                         "\nQuestion:\n" + question +
                         "\nAnswer:";
 
-        // ✅ LLM
+        // 🔥 LLM
         String answer = chatModel.generate(prompt);
 
-        // ✅ Save history
+        // 🔥 Save history
         if (user != null) {
             ChatHistory chat = new ChatHistory();
             chat.setQuestion(question);
@@ -109,7 +110,7 @@ public class RagService {
         return answer;
     }
 
-    // ✅ VECTOR FORMAT
+    // 🔥 VECTOR FORMAT
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
