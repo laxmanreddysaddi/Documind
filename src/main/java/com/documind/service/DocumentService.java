@@ -23,19 +23,17 @@ public class DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentEmbeddingRepository embeddingRepository;
-    private final OpenAIEmbeddingService embeddingService; // ✅ FIXED
+    private final OllamaEmbeddingService embeddingService; // ✅ FIXED
 
-    // ✅ CORRECT CONSTRUCTOR (IMPORTANT FIX)
     public DocumentService(DocumentRepository documentRepository,
                            DocumentEmbeddingRepository embeddingRepository,
-                           OpenAIEmbeddingService embeddingService) {
+                           OllamaEmbeddingService embeddingService) {
 
         this.documentRepository = documentRepository;
         this.embeddingRepository = embeddingRepository;
         this.embeddingService = embeddingService;
     }
 
-    // 🔥 MAIN METHOD
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         System.out.println("🔥 Upload started");
@@ -44,12 +42,11 @@ public class DocumentService {
 
             String fileName = file.getOriginalFilename();
 
-            // ✅ Validate file type
             if (!fileName.endsWith(".pdf") && !fileName.endsWith(".docx")) {
                 throw new RuntimeException("Only PDF and DOCX supported");
             }
 
-            // 1️⃣ Save metadata
+            // ✅ Save metadata
             Document doc = new Document();
             doc.setFileName(fileName);
             doc.setFileSize(file.getSize());
@@ -58,43 +55,27 @@ public class DocumentService {
 
             documentRepository.save(doc);
 
-            System.out.println("✅ Document saved ID: " + doc.getId());
-
-            // 2️⃣ Extract text
+            // ✅ Extract text
             String text = extractText(file);
 
             if (text == null || text.isEmpty()) {
-                System.out.println("❌ No text found in document");
+                System.out.println("❌ No text found");
                 return;
             }
 
-            System.out.println("📄 Text length: " + text.length());
-
-            // 3️⃣ Split text
+            // ✅ Split text
             List<String> chunks = splitText(text);
 
-            System.out.println("🔹 Total chunks: " + chunks.size());
-
-            // 4️⃣ Generate embeddings + SAVE
+            // ✅ Generate embeddings
             for (String chunk : chunks) {
 
                 try {
-                    System.out.println("➡ Processing chunk...");
-
                     var embedding = embeddingService.embed(chunk);
-
-                    if (embedding == null || embedding.vector() == null) {
-                        System.out.println("❌ Embedding null");
-                        continue;
-                    }
 
                     float[] vector = embedding.vector();
 
-                    System.out.println("VECTOR SIZE: " + vector.length);
-
                     String vectorString = convertToVectorString(vector);
 
-                    // ✅ SAVE TO DB
                     DocumentEmbedding de = new DocumentEmbedding();
                     de.setChunkText(chunk);
                     de.setDocumentId(doc.getId());
@@ -102,27 +83,22 @@ public class DocumentService {
 
                     embeddingRepository.save(de);
 
-                    System.out.println("🔥 SAVED SUCCESSFULLY");
+                    System.out.println("✅ Saved embedding");
 
                 } catch (Exception e) {
-                    System.out.println("❌ Embedding failed");
                     e.printStackTrace();
                 }
             }
 
         } catch (Exception e) {
-            System.out.println("❌ FULL ERROR:");
             e.printStackTrace();
         }
     }
 
-    // 🔥 TEXT EXTRACTION (PDF + DOCX)
     private String extractText(MultipartFile file) {
-
         try {
             String fileName = file.getOriginalFilename();
 
-            // 📄 PDF
             if (fileName.endsWith(".pdf")) {
                 PDDocument pdf = PDDocument.load(file.getInputStream());
                 PDFTextStripper stripper = new PDFTextStripper();
@@ -131,7 +107,6 @@ public class DocumentService {
                 return text;
             }
 
-            // 📝 DOCX
             else if (fileName.endsWith(".docx")) {
                 XWPFDocument doc = new XWPFDocument(file.getInputStream());
                 XWPFWordExtractor extractor = new XWPFWordExtractor(doc);
@@ -147,9 +122,7 @@ public class DocumentService {
         return "";
     }
 
-    // 🔹 TEXT SPLIT
     private List<String> splitText(String text) {
-
         List<String> chunks = new ArrayList<>();
         int size = 500;
 
@@ -160,35 +133,26 @@ public class DocumentService {
         return chunks;
     }
 
-    // 🔥 VECTOR FORMAT
     private String convertToVectorString(float[] vector) {
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("[");
-
+        StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
             sb.append(vector[i]);
-
-            if (i < vector.length - 1) {
-                sb.append(",");
-            }
+            if (i < vector.length - 1) sb.append(",");
         }
-
         sb.append("]");
         return sb.toString();
     }
 
-    // 📂 DOCUMENT HISTORY
     public List<String> getDocumentHistory(String username) {
 
         List<Document> docs = documentRepository.findByUserUsername(username);
 
-        List<String> fileNames = new ArrayList<>();
+        List<String> names = new ArrayList<>();
 
         for (Document doc : docs) {
-            fileNames.add(doc.getFileName());
+            names.add(doc.getFileName());
         }
 
-        return fileNames;
+        return names;
     }
 }

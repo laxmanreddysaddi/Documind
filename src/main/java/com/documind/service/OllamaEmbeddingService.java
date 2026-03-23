@@ -1,20 +1,18 @@
 package com.documind.service;
 
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
+import dev.langchain4j.model.ollama.OllamaEmbeddingModel;
 import dev.langchain4j.data.embedding.Embedding;
-
 import org.springframework.stereotype.Service;
 
 @Service
-public class OpenAIEmbeddingService {
-
+public class OllamaEmbeddingService {
     private final EmbeddingModel model;
 
-    public OpenAIEmbeddingService() {
-        this.model = OpenAiEmbeddingModel.builder()
-                .apiKey(System.getenv("OPENAI_API_KEY"))
-                .modelName("text-embedding-3-small") // 🔥 important
+    public OllamaEmbeddingService() {
+        this.model = OllamaEmbeddingModel.builder()
+                .baseUrl("http://localhost:11434")
+                .modelName("nomic-embed-text")
                 .build();
     }
 
