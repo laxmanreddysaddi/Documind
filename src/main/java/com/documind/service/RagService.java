@@ -15,14 +15,14 @@ import java.util.List;
 @Service
 public class RagService {
 
-    private final OllamaEmbeddingService embeddingService;
+    private final OpenAIEmbeddingService embeddingService; // ✅ UPDATED
     private final DocumentEmbeddingRepository embeddingRepository;
     private final ChatHistoryRepository chatHistoryRepository;
     private final UserRepository userRepository;
     private final ChatLanguageModel chatModel;
 
     public RagService(
-            OllamaEmbeddingService embeddingService,
+            OpenAIEmbeddingService embeddingService,
             DocumentEmbeddingRepository embeddingRepository,
             ChatLanguageModel chatModel,
             ChatHistoryRepository chatHistoryRepository,
@@ -42,10 +42,10 @@ public class RagService {
         // 1️⃣ Get user
         User user = userRepository.findByUsername(username).orElse(null);
 
-        // 2️⃣ VECTOR SEARCH
         List<String> topChunks;
 
         try {
+            // ✅ Generate embedding
             var embedding = embeddingService.embed(question);
 
             float[] vector = embedding.vector();
@@ -54,6 +54,7 @@ public class RagService {
 
             String vectorString = convertToVectorString(vector);
 
+            // ✅ Vector search
             topChunks = embeddingRepository.findTop3SimilarByUser(vectorString);
 
         } catch (Exception e) {
@@ -66,30 +67,36 @@ public class RagService {
             return "⚠ Please upload a document first!";
         }
 
-        // 3️⃣ Build context
+        // ✅ BUILD CONTEXT (🔥 MOST IMPORTANT FIX)
         StringBuilder context = new StringBuilder();
-        
 
-        // 4️⃣ Prompt
-       String prompt =
-"""
-You are DocuMind AI.
+        for (String chunk : topChunks) {
+            context.append(chunk).append("\n\n");
+        }
 
-Rules:
-- Answer clearly in bullet points
-- Use only the provided context
-- Do not mention sources
+        System.out.println("📄 CONTEXT:\n" + context);
 
-Context:
-""" + context +
+        // ✅ PROMPT
+        String prompt =
+                """
+                You are DocuMind AI.
 
-"\nQuestion:\n" + question +
-"\nAnswer:";
+                Rules:
+                - Answer clearly in bullet points
+                - Use only the provided context
+                - Do not mention sources
+                - If answer not found, say: Not found in document
 
-        // 5️⃣ LLM
+                Context:
+                """ + context +
+
+                        "\nQuestion:\n" + question +
+                        "\nAnswer:";
+
+        // ✅ LLM
         String answer = chatModel.generate(prompt);
 
-        // 6️⃣ Save history
+        // ✅ Save history
         if (user != null) {
             ChatHistory chat = new ChatHistory();
             chat.setQuestion(question);
@@ -102,6 +109,7 @@ Context:
         return answer;
     }
 
+    // ✅ VECTOR FORMAT
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {

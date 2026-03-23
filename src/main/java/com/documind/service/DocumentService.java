@@ -23,11 +23,13 @@ public class DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentEmbeddingRepository embeddingRepository;
-    private final OllamaEmbeddingService embeddingService;
+    private final OpenAIEmbeddingService embeddingService; // ✅ FIXED
 
+    // ✅ CORRECT CONSTRUCTOR (IMPORTANT FIX)
     public DocumentService(DocumentRepository documentRepository,
                            DocumentEmbeddingRepository embeddingRepository,
-                           OllamaEmbeddingService embeddingService) {
+                           OpenAIEmbeddingService embeddingService) {
+
         this.documentRepository = documentRepository;
         this.embeddingRepository = embeddingRepository;
         this.embeddingService = embeddingService;
@@ -92,7 +94,7 @@ public class DocumentService {
 
                     String vectorString = convertToVectorString(vector);
 
-                    // ✅ SAVE USING JPA (FIXED)
+                    // ✅ SAVE TO DB
                     DocumentEmbedding de = new DocumentEmbedding();
                     de.setChunkText(chunk);
                     de.setDocumentId(doc.getId());
