@@ -28,11 +28,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <dependency>
-    <groupId>dev.langchain4j</groupId>
-    <artifactId>langchain4j-ollama</artifactId>
-    <version>0.35.0</version>
-</dependency>
 
         <!-- 🔐 Security -->
         <dependency>
@@ -46,10 +41,6 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-<dependency>
-    <groupId>dev.langchain4j</groupId>
-    <artifactId>langchain4j-hugging-face</artifactId>
-</dependency>
         <!-- ✅ Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -98,17 +89,18 @@
             <version>5.2.5</version>
         </dependency>
 
-        <!-- 🤖 LangChain4j -->
+        <!-- 🤖 LangChain4j CORE -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>0.33.0</version>
+            <version>0.35.0</version>
         </dependency>
 
+        <!-- 🤖 HuggingFace Embeddings -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-ollama</artifactId>
-            <version>0.33.0</version>
+            <artifactId>langchain4j-hugging-face</artifactId>
+            <version>0.35.0</version>
         </dependency>
 
         <!-- ⚡ Cache -->
