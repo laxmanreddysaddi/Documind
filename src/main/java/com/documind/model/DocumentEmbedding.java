@@ -10,18 +10,15 @@ public class DocumentEmbedding {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 🔹 actual text chunk
     @Column(columnDefinition = "TEXT")
     private String chunkText;
 
-    // 🔹 embedding vector stored as string
     @Column(columnDefinition = "TEXT")
     private String embedding;
 
-    // 🔹 link to document
     private Long documentId;
 
-    // ✅ GETTERS & SETTERS
+    // Getters & Setters
 
     public Long getId() {
         return id;

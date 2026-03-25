@@ -51,26 +51,22 @@ public class RagService {
             float[] vector = embedding.vector();
             String vectorString = convertToVectorString(vector);
 
-            System.out.println("🔍 Searching vector DB...");
-            topChunks = List.of(
-        "DocuMind is an AI system for analyzing documents.",
-        "It uses embeddings and vector search to find relevant content.",
-        "RAG stands for Retrieval Augmented Generation."
-);
+            System.out.println("⚠ Using fallback vector search...");
 
-System.out.println("📄 Using fallback data: " + topChunks.size());
+            // ✅ TEMP SAFE DATA (NO CRASH)
+            topChunks = embeddingRepository.findTop3SimilarByUser(vectorString);
+
+            System.out.println("📄 Results: " + topChunks.size());
 
         } catch (Exception e) {
             e.printStackTrace();
             return "❌ Vector error: " + e.getMessage();
         }
 
-        // ✅ SAFE FALLBACK
         if (topChunks == null || topChunks.isEmpty()) {
-            return "⚠ No documents found. Please upload a file first.";
+            return "⚠ No documents found. Please upload a file.";
         }
 
-        // Build context
         StringBuilder context = new StringBuilder();
         for (String chunk : topChunks) {
             context.append(chunk).append("\n\n");
@@ -87,7 +83,6 @@ System.out.println("📄 Using fallback data: " + topChunks.size());
 
         String answer = chatModel.generate(prompt);
 
-        // Save history
         if (user != null) {
             ChatHistory chat = new ChatHistory();
             chat.setQuestion(question);

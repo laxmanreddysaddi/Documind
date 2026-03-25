@@ -20,17 +20,17 @@ public class HuggingFaceEmbeddingService {
 
         this.model = HuggingFaceEmbeddingModel.builder()
                 .accessToken(token)
-                .modelId("sentence-transformers/all-MiniLM-L6-v2")
+                .modelId("intfloat/e5-small-v2") // ✅ WORKING MODEL
                 .build();
     }
 
     public Embedding embed(String text) {
-
         try {
+            System.out.println("⚡ Calling HuggingFace embedding API...");
             return model.embed(text).content();
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("❌ HuggingFace embedding failed");
+            throw new RuntimeException("❌ HuggingFace embedding failed: " + e.getMessage());
         }
     }
 }
