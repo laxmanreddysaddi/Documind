@@ -11,41 +11,10 @@ public class DocumentEmbedding {
     private Long id;
 
     @Column(columnDefinition = "TEXT")
-    private String chunkText;
+    private String content;
 
-    private Long documentId;
-
-    // ✅ VECTOR COLUMN
-    @Column(columnDefinition = "vector(768)")
+    @Column(columnDefinition = "TEXT")
     private String embedding;
 
-    // Getters & Setters
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getChunkText() {
-        return chunkText;
-    }
-
-    public void setChunkText(String chunkText) {
-        this.chunkText = chunkText;
-    }
-
-    public Long getDocumentId() {
-        return documentId;
-    }
-
-    public void setDocumentId(Long documentId) {
-        this.documentId = documentId;
-    }
-
-    public String getEmbedding() {
-        return embedding;
-    }
-
-    public void setEmbedding(String embedding) {
-        this.embedding = embedding;
-    }
+    // getters and setters
 }

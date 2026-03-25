@@ -1,19 +1,20 @@
 package com.documind.repository;
 
+import com.documind.model.DocumentEmbedding;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-public interface DocumentEmbeddingRepository extends JpaRepository<Object, Long> {
+public interface DocumentEmbeddingRepository extends JpaRepository<DocumentEmbedding, Long> {
 
-    // TEMP FIX: Return simple text (no vector query)
+    // TEMP method (no vector search yet)
     default List<String> findTop3SimilarByUser(String vector) {
         return List.of(
-                "Sample document chunk 1",
-                "Sample document chunk 2",
-                "Sample document chunk 3"
+                "DocuMind processes documents using AI.",
+                "Embeddings help find similar content.",
+                "RAG improves answer quality."
         );
     }
 }
