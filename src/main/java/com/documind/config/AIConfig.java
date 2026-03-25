@@ -8,12 +8,12 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class AIConfig {
 
-    @Bean
-    public ChatLanguageModel chatLanguageModel() {
-        return OpenAiChatModel.builder()
-                .apiKey(System.getenv("OPENROUTER_API_KEY"))
-                .baseUrl("https://openrouter.ai/api/v1") // ✅ IMPORTANT
-                .modelName("mistralai/mistral-7b-instruct") // FREE
-                .build();
-    }
+   @Bean
+public ChatLanguageModel chatLanguageModel() {
+    return OpenAiChatModel.builder()
+            .apiKey(System.getenv("OPENROUTER_API_KEY"))
+            .baseUrl("https://openrouter.ai/api/v1")
+            .modelName("openchat/openchat-3.5") // ✅ FIXED
+            .build();
+}
 }
