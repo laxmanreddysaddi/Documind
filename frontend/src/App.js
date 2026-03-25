@@ -1,102 +1,248 @@
-const BASE_URL = process.env.REACT_APP_API_URL;
+import { useState, useEffect, useRef } from "react";
+import axios from "axios";
 
-// Helper
-const getToken = () => localStorage.getItem("token");
+// ✅ FIXED BASE URL
+const BASE_URL =
+  process.env.REACT_APP_API_URL ||
+  "https://documind-backend-30m4.onrender.com/api";
 
-// ✅ Login
-export const login = async (username, password) => {
-  const res = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ username, password })
-  });
+export default function App() {
 
-  if (!res.ok) throw new Error("Login failed");
+  // 🔐 AUTH
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState(localStorage.getItem("username") || "");
+  const [password, setPassword] = useState("");
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
 
-  return res.json();
-};
+  // 💬 CHAT
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-// ✅ Register
-export const register = async (username, password) => {
-  const res = await fetch(`${BASE_URL}/auth/register`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ username, password })
-  });
+  const textareaRef = useRef(null);
+  const chatEndRef = useRef(null);
 
-  if (!res.ok) throw new Error("Register failed");
+  // 🔽 Auto scroll
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
-  return res.text();
-};
+  // 🔄 Auto resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height =
+        textareaRef.current.scrollHeight + "px";
+    }
+  }, [question]);
 
-// ✅ Chat (UPDATED)
-export const askQuestion = async (question, username) => {
-  const res = await fetch(
-    `${BASE_URL}/chat?question=${encodeURIComponent(question)}&username=${username}`,
-    {
-      headers: {
-        Authorization: `Bearer ${getToken()}`
+  // 🔐 AUTH
+  const handleAuth = async () => {
+    try {
+      const url = isLogin
+        ? `${BASE_URL}/auth/login`
+        : `${BASE_URL}/auth/register`;
+
+      const res = await axios.post(url, { username, password });
+
+      if (isLogin) {
+        const tokenValue = res.data.token || res.data;
+
+        setToken(tokenValue);
+        localStorage.setItem("token", tokenValue);
+        localStorage.setItem("username", username);
+
+      } else {
+        alert("Registered! Now login");
+        setIsLogin(true);
       }
+
+    } catch (err) {
+      alert("❌ Auth Error: " + (err.response?.data || err.message));
     }
+  };
+
+  // 💬 SEND MESSAGE
+  const sendMessage = async () => {
+    if (!question.trim()) return;
+
+    const userMsg = { role: "user", text: question };
+    setMessages((prev) => [...prev, userMsg]);
+    setQuestion("");
+    setLoading(true);
+
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/chat`,
+        {
+          params: { question, username }, // ✅ FIXED
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: res.data }
+      ]);
+
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "❌ Error getting response" },
+      ]);
+    }
+
+    setLoading(false);
+  };
+
+  // 📤 FILE UPLOAD
+  const uploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      await axios.post(
+        `${BASE_URL}/documents/upload`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      alert("✅ Uploaded successfully");
+
+    } catch (err) {
+      alert("❌ Upload failed");
+    }
+  };
+
+  // 🔐 LOGIN UI
+  if (!token) {
+    return (
+      <div className="flex h-screen">
+
+        <div className="w-1/2 bg-gradient-to-br from-blue-600 to-purple-600 text-white flex justify-center items-center">
+          <h1 className="text-4xl font-bold">DocuMind AI</h1>
+        </div>
+
+        <div className="w-1/2 flex justify-center items-center bg-gray-100">
+          <div className="bg-white p-8 rounded-xl shadow-xl w-96">
+
+            <h2 className="text-2xl font-bold mb-4">
+              {isLogin ? "Login" : "Register"}
+            </h2>
+
+            <input
+              className="w-full border p-2 mb-3 rounded"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+
+            <input
+              type="password"
+              className="w-full border p-2 mb-3 rounded"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button
+              onClick={handleAuth}
+              className="w-full bg-blue-600 text-white p-2 rounded"
+            >
+              {isLogin ? "Login" : "Register"}
+            </button>
+
+            <p
+              className="mt-3 text-blue-600 cursor-pointer"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              {isLogin
+                ? "Don't have account? Register"
+                : "Already have account? Login"}
+            </p>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 💬 CHAT UI
+  return (
+    <div className="flex h-screen bg-[#0f172a]">
+
+      {/* SIDEBAR */}
+      <div className="w-64 bg-[#020617] text-white p-4">
+
+        <h2 className="text-xl font-bold mb-4">🤖 DocuMind</h2>
+
+        <button
+          className="bg-blue-600 text-white p-2 rounded mb-3 w-full"
+          onClick={() => setMessages([])}
+        >
+          + New Chat
+        </button>
+
+        <label className="cursor-pointer bg-gray-500 text-white p-2 rounded w-full text-center block">
+          Upload File
+          <input type="file" className="hidden" onChange={uploadFile} />
+        </label>
+
+        <button
+          className="mt-4 w-full bg-red-600 text-white p-2 rounded"
+          onClick={() => {
+            localStorage.clear();
+            setToken("");
+          }}
+        >
+          Logout
+        </button>
+      </div>
+
+      {/* CHAT */}
+      <div className="flex flex-col flex-1">
+
+        <div className="flex-1 p-6 overflow-y-auto">
+          {messages.map((msg, i) => (
+            <div key={i} className={`mb-4 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-xl px-4 py-3 rounded-2xl ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-800 text-white"
+              }`}>
+                {msg.text}
+              </div>
+            </div>
+          ))}
+
+          {loading && <div className="text-gray-400">🤖 Thinking...</div>}
+
+          <div ref={chatEndRef} />
+        </div>
+
+        <div className="p-4 flex">
+          <input
+            className="flex-1 p-3 rounded-xl"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+          />
+
+          <button
+            onClick={sendMessage}
+            className="ml-3 bg-blue-600 text-white px-5 py-2 rounded-xl"
+          >
+            Send
+          </button>
+        </div>
+
+      </div>
+    </div>
   );
-
-  if (!res.ok) throw new Error("Chat failed");
-
-  return res.text();
-};
-
-// ✅ Upload
-export const uploadFile = async (file) => {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const res = await fetch(`${BASE_URL}/documents/upload`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${getToken()}`
-    },
-    body: formData
-  });
-
-  if (!res.ok) throw new Error("Upload failed");
-
-  return res.text();
-};
-
-// ✅ Chat history (UPDATED)
-export const getHistory = async (username) => {
-  const res = await fetch(`${BASE_URL}/history/${username}`, {
-    headers: {
-      Authorization: `Bearer ${getToken()}`
-    }
-  });
-
-  if (!res.ok) throw new Error("History fetch failed");
-
-  return res.json();
-};
-
-// ✅ Documents
-export const getDocuments = async () => {
-  const res = await fetch(`${BASE_URL}/documents/history`, {
-    headers: {
-      Authorization: `Bearer ${getToken()}`
-    }
-  });
-
-  if (!res.ok) throw new Error("Documents fetch failed");
-
-  return res.json();
-};
-
-// ✅ Clear chat
-export const clearHistory = async (username) => {
-  const res = await fetch(`${BASE_URL}/history/${username}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${getToken()}`
-    }
-  });
-
-  if (!res.ok) throw new Error("Clear history failed");
-};
+}
