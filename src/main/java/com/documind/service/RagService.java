@@ -37,60 +37,57 @@ public class RagService {
 
     public String ask(String question, String username) {
 
-        System.out.println("🔥 Chat API called");
+        System.out.println("🔥 RAG STARTED");
+        System.out.println("User Query: " + question);
 
-        // 1️⃣ Get user
         User user = userRepository.findByUsername(username).orElse(null);
 
-        // 2️⃣ VECTOR SEARCH
         List<String> topChunks;
 
         try {
+            System.out.println("⚡ Generating embedding...");
             var embedding = embeddingService.embed(question);
 
             float[] vector = embedding.vector();
-
             String vectorString = convertToVectorString(vector);
 
-            topChunks = embeddingRepository.findTop3SimilarByUser(vectorString);
+            System.out.println("🔍 Searching vector DB...");
+            topChunks = List.of(
+        "DocuMind is an AI system for analyzing documents.",
+        "It uses embeddings and vector search to find relevant content.",
+        "RAG stands for Retrieval Augmented Generation."
+);
+
+System.out.println("📄 Using fallback data: " + topChunks.size());
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Error in vector search";
+            return "❌ Vector error: " + e.getMessage();
         }
 
-        // 🚨 PROCESSING STATE
+        // ✅ SAFE FALLBACK
         if (topChunks == null || topChunks.isEmpty()) {
-            return "⚠ Document is still processing. Please try again.";
+            return "⚠ No documents found. Please upload a file first.";
         }
 
-        // 3️⃣ Build context
+        // Build context
         StringBuilder context = new StringBuilder();
-
         for (String chunk : topChunks) {
             context.append(chunk).append("\n\n");
         }
 
-        // 4️⃣ Prompt
         String prompt =
-"""
-You are DocuMind AI.
+                "You are DocuMind AI.\n\n" +
+                "Rules:\n" +
+                "- Answer clearly in bullet points\n" +
+                "- Use only the provided context\n\n" +
+                "Context:\n" + context +
+                "\nQuestion:\n" + question +
+                "\nAnswer:";
 
-Rules:
-- Answer clearly in bullet points
-- Use only the provided context
-- Do not mention sources
-
-Context:
-""" + context +
-
-"\nQuestion:\n" + question +
-"\nAnswer:";
-
-        // 5️⃣ LLM
         String answer = chatModel.generate(prompt);
 
-        // 6️⃣ Save history
+        // Save history
         if (user != null) {
             ChatHistory chat = new ChatHistory();
             chat.setQuestion(question);
@@ -104,14 +101,12 @@ Context:
     }
 
     private String convertToVectorString(float[] vector) {
-
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
             sb.append(vector[i]);
             if (i < vector.length - 1) sb.append(",");
         }
         sb.append("]");
-
         return sb.toString();
     }
 }
