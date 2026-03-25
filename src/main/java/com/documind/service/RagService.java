@@ -72,14 +72,14 @@ public class RagService {
             context.append(chunk).append("\n\n");
         }
 
-        String prompt =
-                "You are DocuMind AI.\n\n" +
-                "Rules:\n" +
-                "- Answer clearly in bullet points\n" +
-                "- Use only the provided context\n\n" +
-                "Context:\n" + context +
-                "\nQuestion:\n" + question +
-                "\nAnswer:";
+       String prompt =
+        "You are DocuMind AI.\n\n" +
+        "Answer ONLY using the given context.\n" +
+        "If answer is not present, say 'Not found in document'.\n" +
+        "Answer clearly in bullet points.\n\n" +
+        "Context:\n" + context +
+        "\nQuestion:\n" + question +
+        "\nAnswer:";
 
                 String answer;
 
