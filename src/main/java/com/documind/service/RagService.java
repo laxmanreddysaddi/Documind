@@ -81,16 +81,8 @@ public class RagService {
                 "\nQuestion:\n" + question +
                 "\nAnswer:";
 
-        String answer = "⚠ AI temporarily unavailable. Here is a basic answer:\n\n" +
-        "Types of sensors include:\n" +
-        "- Temperature sensor\n" +
-        "- Pressure sensor\n" +
-        "- Motion sensor\n" +
-        "- Light sensor\n" +
-        "- Proximity sensor\n" +
-        "- Gas sensor\n" +
-        "- Sound sensor\n";;
-
+        
+           String answer = chatModel.generate(prompt);
         if (user != null) {
             ChatHistory chat = new ChatHistory();
             chat.setQuestion(question);
