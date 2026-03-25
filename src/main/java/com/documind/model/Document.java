@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "documents")
 public class Document {
 
     @Id
@@ -14,7 +15,8 @@ public class Document {
 
     private Long fileSize;
 
-    private String userUsername;
+    @Column(nullable = false)
+    private String userUsername; // ✅ keep this
 
     private LocalDateTime uploadedAt;
 

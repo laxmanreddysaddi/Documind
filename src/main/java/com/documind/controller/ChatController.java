@@ -1,42 +1,42 @@
 package com.documind.controller;
 
-import com.documind.service.ChatService;
-import org.springframework.security.core.Authentication;
+import com.documind.model.ChatHistory;
+import com.documind.repository.ChatHistoryRepository;
+import com.documind.service.RagService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/chat")
+@RequestMapping("/api")
+@CrossOrigin("*")
 public class ChatController {
 
-    private final ChatService chatService;
+    private final RagService ragService;
+    private final ChatHistoryRepository chatHistoryRepository;
 
-    public ChatController(ChatService chatService) {
-        this.chatService = chatService;
+    public ChatController(RagService ragService,
+                          ChatHistoryRepository chatHistoryRepository) {
+        this.ragService = ragService;
+        this.chatHistoryRepository = chatHistoryRepository;
     }
 
-    @GetMapping
-    public String chat(@RequestParam String question, Authentication authentication) {
-
-        String username = "anonymous";
-
-        if (authentication != null) {
-            username = authentication.getName();
-        }
-
-        return chatService.ask(question, username);
+    // ✅ Chat API
+    @GetMapping("/chat")
+    public String chat(@RequestParam String question,
+                       @RequestParam String username) {
+        return ragService.ask(question, username);
     }
 
-    @GetMapping("/history")
-    public List<String> getChatHistory(Authentication authentication) {
+    // ✅ Get chat history
+    @GetMapping("/history/{username}")
+    public List<ChatHistory> getHistory(@PathVariable String username) {
+        return chatHistoryRepository.findByUserUsername(username);
+    }
 
-        if (authentication == null) {
-            throw new RuntimeException("User not authenticated");
-        }
-
-        String username = authentication.getName();
-
-        return chatService.getChatHistory(username);
+    // ✅ Clear chat history
+    @DeleteMapping("/history/{username}")
+    public void clearHistory(@PathVariable String username) {
+        chatHistoryRepository.deleteByUserUsername(username);
     }
 }

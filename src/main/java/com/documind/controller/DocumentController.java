@@ -1,6 +1,8 @@
 package com.documind.controller;
 
+import com.documind.model.Document;
 import com.documind.service.DocumentService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -9,7 +11,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/documents")
-@CrossOrigin(origins = "http://localhost:3000") // 🔥 FIX CORS
+@CrossOrigin("*")
 public class DocumentController {
 
     private final DocumentService documentService;
@@ -18,31 +20,36 @@ public class DocumentController {
         this.documentService = documentService;
     }
 
+    // ✅ Upload Document
     @PostMapping("/upload")
-    public String uploadDocument(
+    public ResponseEntity<?> uploadDocument(
             @RequestParam("file") MultipartFile file,
             Authentication authentication) {
 
         System.out.println("🔥 Upload API called");
 
-        String username = "anonymous";
-
-        if (authentication != null) {
-            username = authentication.getName();
+        if (authentication == null) {
+            return ResponseEntity.status(401).body("❌ User not authenticated");
         }
+
+        String username = authentication.getName();
 
         documentService.saveDocumentMetadata(file, username);
 
-        return "✅ Document uploaded successfully";
+        return ResponseEntity.ok("✅ Document uploaded successfully");
     }
 
+    // ✅ Get Document History
     @GetMapping("/history")
-    public List<String> getDocumentHistory(Authentication authentication) {
+    public ResponseEntity<?> getDocumentHistory(Authentication authentication) {
 
         if (authentication == null) {
-            throw new RuntimeException("❌ User not authenticated");
+            return ResponseEntity.status(401).body("❌ User not authenticated");
         }
 
-        return documentService.getDocumentHistory(authentication.getName());
+        List<Document> documents =
+                documentService.getDocumentsByUser(authentication.getName());
+
+        return ResponseEntity.ok(documents);
     }
 }
