@@ -11,7 +11,7 @@ public class AIConfig {
     @Bean
     public ChatLanguageModel chatLanguageModel() {
         return HuggingFaceChatModel.builder()
-                .apiKey(System.getenv("HF_TOKEN"))
+                .accessToken(System.getenv("HF_TOKEN"))
                 .modelId("mistralai/Mistral-7B-Instruct-v0.2") // FREE model
                 .build();
     }
