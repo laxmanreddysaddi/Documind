@@ -1,36 +1,25 @@
 package com.documind.service;
 
 import dev.langchain4j.data.embedding.Embedding;
-import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.huggingface.HuggingFaceEmbeddingModel;
 import org.springframework.stereotype.Service;
+
+import java.util.Random;
 
 @Service
 public class HuggingFaceEmbeddingService {
 
-    private final EmbeddingModel model;
-
-    public HuggingFaceEmbeddingService() {
-
-        String token = System.getenv("HF_TOKEN");
-
-        if (token == null || token.isEmpty()) {
-            throw new RuntimeException("❌ HF_TOKEN is not set in environment variables");
-        }
-
-        this.model = HuggingFaceEmbeddingModel.builder()
-                .accessToken(token)
-                .modelId("intfloat/e5-small-v2") // ✅ WORKING MODEL
-                .build();
-    }
-
+    // ✅ TEMP: Generate fake embedding (no API call)
     public Embedding embed(String text) {
-        try {
-            System.out.println("⚡ Calling HuggingFace embedding API...");
-            return model.embed(text).content();
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("❌ HuggingFace embedding failed: " + e.getMessage());
+
+        System.out.println("⚠ Using dummy embedding (HF disabled)");
+
+        float[] vector = new float[384]; // standard size
+
+        Random random = new Random();
+        for (int i = 0; i < vector.length; i++) {
+            vector[i] = random.nextFloat();
         }
+
+        return new Embedding(vector);
     }
 }
