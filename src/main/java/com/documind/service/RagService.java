@@ -81,8 +81,18 @@ public class RagService {
                 "\nQuestion:\n" + question +
                 "\nAnswer:";
 
+                String answer;
+
+         try {
+    System.out.println("🤖 Calling OpenRouter...");
+    answer = chatModel.generate(prompt);
+    System.out.println("✅ AI Response received");
+
+} catch (Exception e) {
+    e.printStackTrace();
+    return "❌ Chat error: " + e.getMessage();
+}
         
-           String answer = chatModel.generate(prompt);
         if (user != null) {
             ChatHistory chat = new ChatHistory();
             chat.setQuestion(question);
