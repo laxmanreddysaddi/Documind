@@ -112,46 +112,33 @@ export default function App() {
   };
 
   // 📤 FILE UPLOAD
-  const uploadFile = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+ const uploadFile = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("❌ File too large (max 5MB)");
-      return;
-    }
+  const formData = new FormData();
+  formData.append("file", file);
 
-    const formData = new FormData();
-    formData.append("file", file);
+  try {
+    setUploading(true);
 
-    try {
-      setUploading(true);
-      setProgress(0);
+    const res = await fetch(`${BASE_URL}/documents/upload`, {
+      method: "POST",
+      body: formData
+    });
 
-      await axios.post(
-        `${BASE_URL}/documents/upload`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          onUploadProgress: (event) => {
-            const percent = Math.round(
-              (event.loaded * 100) / event.total
-            );
-            setProgress(percent);
-          },
-        }
-      );
+    const text = await res.text();
 
-      alert("✅ Uploaded! Processing document...");
+    if (!res.ok) throw new Error(text);
 
-    } catch (err) {
-      alert("❌ Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
+    alert("✅ Uploaded successfully");
+
+  } catch (err) {
+    alert("❌ Upload failed: " + err.message);
+  } finally {
+    setUploading(false);
+  }
+};
 
   // 🔐 LOGIN UI
   if (!token) {

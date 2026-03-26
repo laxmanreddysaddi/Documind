@@ -25,11 +25,9 @@ public class DocumentService {
         this.embeddingRepository = embeddingRepository;
     }
 
-    // 🚀 SAVE DOCUMENT + GENERATE EMBEDDINGS
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         try {
-            // 1️⃣ Save document metadata
             Document doc = new Document();
             doc.setFileName(file.getOriginalFilename());
             doc.setFileSize(file.getSize());
@@ -38,41 +36,36 @@ public class DocumentService {
 
             documentRepository.save(doc);
 
-            // 2️⃣ Read file content
             String content = new String(file.getBytes(), StandardCharsets.UTF_8);
 
-            System.out.println("📄 Content preview: " +
-                    content.substring(0, Math.min(200, content.length())));
-
-            // 3️⃣ Split into chunks
             String[] chunks = content.split("\\. ");
 
-            // 4️⃣ Generate SIMPLE embeddings (WORKING)
             for (String chunk : chunks) {
 
                 if (chunk.trim().isEmpty()) continue;
 
-                String vectorString = generateSimpleEmbedding(chunk);
+                String vector = generateSimpleEmbedding(chunk);
 
                 DocumentEmbedding de = new DocumentEmbedding();
                 de.setChunkText(chunk);
-                de.setEmbedding(vectorString);
+                de.setEmbedding(vector);
                 de.setDocumentId(doc.getId());
 
                 embeddingRepository.save(de);
-
-                System.out.println("✅ Saved chunk: " + chunk);
             }
 
-            System.out.println("🔥 All embeddings saved successfully");
+            System.out.println("✅ Embeddings saved");
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("❌ File processing failed");
+            throw new RuntimeException("Upload failed");
         }
     }
 
-    // 🔥 SIMPLE EMBEDDING FUNCTION (NO API, NO ERROR)
+    public List<Document> getDocumentsByUser(String username) {
+        return documentRepository.findByUserUsername(username);
+    }
+
     private String generateSimpleEmbedding(String text) {
 
         float[] vector = new float[10];
@@ -89,10 +82,5 @@ public class DocumentService {
         sb.append("]");
 
         return sb.toString();
-    }
-
-    // ✅ GET USER DOCUMENTS
-    public List<Document> getDocumentsByUser(String username) {
-        return documentRepository.findByUserUsername(username);
     }
 }
