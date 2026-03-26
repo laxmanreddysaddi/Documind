@@ -13,7 +13,7 @@ public class AIConfig {
         return OpenAiChatModel.builder()
                 .apiKey(System.getenv("OPENROUTER_API_KEY"))
                 .baseUrl("https://openrouter.ai/api/v1")
-                .modelName("openai/gpt-3.5-turbo") // ✅ FINAL WORKING
+                .modelName("mistralai/mistral-7b-instruct") // ✅ FINAL WORKING
                 .build();
     }
 }
