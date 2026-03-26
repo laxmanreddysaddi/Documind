@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-// ✅ BASE URL (ENV + FALLBACK)
+// ✅ BASE URL
 const BASE_URL =
   process.env.REACT_APP_API_URL ||
   "https://documind-backend-30m4.onrender.com/api";
@@ -26,11 +26,6 @@ export default function App() {
 
   const textareaRef = useRef(null);
   const chatEndRef = useRef(null);
-
-  // 🔥 Wake backend (reduce delay)
-  useEffect(() => {
-    fetch(`${BASE_URL}/chat?question=hi&username=test`).catch(() => {});
-  }, []);
 
   // 🔽 Auto scroll
   useEffect(() => {
@@ -93,7 +88,6 @@ export default function App() {
     try {
       const res = await axios.get(`${BASE_URL}/chat`, {
         params: { question, username },
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       setMessages((prev) => [
@@ -111,34 +105,37 @@ export default function App() {
     setLoading(false);
   };
 
-  // 📤 FILE UPLOAD
- const uploadFile = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  // 📤 FILE UPLOAD (FIXED)
+  const uploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-  const formData = new FormData();
-  formData.append("file", file);
+    const formData = new FormData();
+    formData.append("file", file);
 
-  try {
-    setUploading(true);
+    try {
+      setUploading(true);
+      setProgress(0);
 
-    const res = await fetch(`${BASE_URL}/documents/upload`, {
-      method: "POST",
-      body: formData
-    });
+      await axios.post(
+        `${BASE_URL}/documents/upload`,
+        formData,
+        {
+          onUploadProgress: (event) => {
+            const percent = Math.round((event.loaded * 100) / event.total);
+            setProgress(percent);
+          },
+        }
+      );
 
-    const text = await res.text();
+      alert("✅ Uploaded successfully");
 
-    if (!res.ok) throw new Error(text);
-
-    alert("✅ Uploaded successfully");
-
-  } catch (err) {
-    alert("❌ Upload failed: " + err.message);
-  } finally {
-    setUploading(false);
-  }
-};
+    } catch (err) {
+      alert("❌ Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // 🔐 LOGIN UI
   if (!token) {
@@ -174,14 +171,10 @@ export default function App() {
             <button
               onClick={handleAuth}
               disabled={authLoading}
-              className={`w-full p-2 rounded text-white ${
-                authLoading ? "bg-gray-400" : "bg-blue-600"
-              }`}
+              className="w-full p-2 rounded text-white bg-blue-600"
             >
               {authLoading
-                ? isLogin
-                  ? "Logging in..."
-                  : "Registering..."
+                ? "Please wait..."
                 : isLogin
                 ? "Login"
                 : "Register"}
@@ -212,14 +205,14 @@ export default function App() {
         <h2 className="text-xl font-bold mb-4">🤖 DocuMind</h2>
 
         <button
-          className="bg-blue-600 text-white p-2 rounded mb-3 w-full"
+          className="bg-blue-600 p-2 rounded mb-3 w-full"
           onClick={() => setMessages([])}
         >
           + New Chat
         </button>
 
         {/* Upload */}
-        <label className="cursor-pointer bg-gray-500 text-white p-2 rounded w-full text-center block">
+        <label className="cursor-pointer bg-gray-500 p-2 rounded w-full text-center block">
           {uploading ? `Uploading... ${progress}%` : "Upload File"}
 
           <input
@@ -241,7 +234,7 @@ export default function App() {
         )}
 
         <button
-          className="mt-4 w-full bg-red-600 text-white p-2 rounded"
+          className="mt-4 w-full bg-red-600 p-2 rounded"
           onClick={() => {
             localStorage.clear();
             setToken("");
@@ -257,30 +250,14 @@ export default function App() {
         {/* Messages */}
         <div className="flex-1 p-6 overflow-y-auto">
           {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`mb-4 flex ${
-                msg.role === "user"
-                  ? "justify-end"
-                  : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-xl px-4 py-3 rounded-2xl ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-800 text-white"
-                }`}
-              >
+            <div key={i} className={`mb-4 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-xl px-4 py-3 rounded-2xl ${msg.role === "user" ? "bg-blue-600" : "bg-gray-800"}`}>
                 {msg.text}
               </div>
             </div>
           ))}
 
-          {loading && (
-            <div className="text-gray-400">🤖 Thinking...</div>
-          )}
-
+          {loading && <div className="text-gray-400">🤖 Thinking...</div>}
           <div ref={chatEndRef} />
         </div>
 
@@ -293,8 +270,6 @@ export default function App() {
             value={question}
             placeholder="Ask about your document..."
             onChange={(e) => setQuestion(e.target.value)}
-
-            // ✅ ENTER TO SEND
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -305,7 +280,7 @@ export default function App() {
 
           <button
             onClick={sendMessage}
-            className="ml-3 bg-blue-600 text-white px-5 py-2 rounded-xl"
+            className="ml-3 bg-blue-600 px-5 py-2 rounded-xl"
           >
             Send
           </button>
