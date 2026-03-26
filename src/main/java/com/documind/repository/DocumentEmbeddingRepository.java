@@ -9,12 +9,6 @@ import java.util.List;
 @Repository
 public interface DocumentEmbeddingRepository extends JpaRepository<DocumentEmbedding, Long> {
 
-    // TEMP method (no vector search yet)
-    default List<String> findTop3SimilarByUser(String vector) {
-        return List.of(
-                "DocuMind processes documents using AI.",
-                "Embeddings help find similar content.",
-                "RAG improves answer quality."
-        );
-    }
+    // ✅ ADD THIS (IMPORTANT)
+    List<DocumentEmbedding> findByDocumentIdIn(List<Long> documentIds);
 }

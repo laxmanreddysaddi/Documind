@@ -28,15 +28,32 @@ public class DocumentController {
 
         System.out.println("🔥 Upload API called");
 
+        // ❌ Not logged in
         if (authentication == null) {
             return ResponseEntity.status(401).body("❌ User not authenticated");
         }
 
+        // ❌ Empty file check
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body("❌ File is empty");
+        }
+
+        // ❌ File size limit (5MB)
+        if (file.getSize() > 5 * 1024 * 1024) {
+            return ResponseEntity.badRequest().body("❌ File too large (max 5MB)");
+        }
+
         String username = authentication.getName();
 
-        documentService.saveDocumentMetadata(file, username);
+        try {
+            documentService.saveDocumentMetadata(file, username);
+            return ResponseEntity.ok("✅ Document uploaded and processed successfully");
 
-        return ResponseEntity.ok("✅ Document uploaded successfully");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError()
+                    .body("❌ Failed to process document");
+        }
     }
 
     // ✅ Get Document History
@@ -47,9 +64,16 @@ public class DocumentController {
             return ResponseEntity.status(401).body("❌ User not authenticated");
         }
 
-        List<Document> documents =
-                documentService.getDocumentsByUser(authentication.getName());
+        try {
+            List<Document> documents =
+                    documentService.getDocumentsByUser(authentication.getName());
 
-        return ResponseEntity.ok(documents);
+            return ResponseEntity.ok(documents);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError()
+                    .body("❌ Failed to fetch documents");
+        }
     }
 }

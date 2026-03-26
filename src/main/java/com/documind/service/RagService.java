@@ -1,9 +1,12 @@
 package com.documind.service;
 
 import com.documind.model.ChatHistory;
+import com.documind.model.Document;
+import com.documind.model.DocumentEmbedding;
 import com.documind.model.User;
 import com.documind.repository.ChatHistoryRepository;
 import com.documind.repository.DocumentEmbeddingRepository;
+import com.documind.repository.DocumentRepository;
 import com.documind.repository.UserRepository;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -11,12 +14,14 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class RagService {
 
     private final HuggingFaceEmbeddingService embeddingService;
     private final DocumentEmbeddingRepository embeddingRepository;
+    private final DocumentRepository documentRepository;
     private final ChatHistoryRepository chatHistoryRepository;
     private final UserRepository userRepository;
     private final ChatLanguageModel chatModel;
@@ -24,12 +29,14 @@ public class RagService {
     public RagService(
             HuggingFaceEmbeddingService embeddingService,
             DocumentEmbeddingRepository embeddingRepository,
+            DocumentRepository documentRepository,
             ChatLanguageModel chatModel,
             ChatHistoryRepository chatHistoryRepository,
             UserRepository userRepository
     ) {
         this.embeddingService = embeddingService;
         this.embeddingRepository = embeddingRepository;
+        this.documentRepository = documentRepository;
         this.chatModel = chatModel;
         this.chatHistoryRepository = chatHistoryRepository;
         this.userRepository = userRepository;
@@ -37,81 +44,90 @@ public class RagService {
 
     public String ask(String question, String username) {
 
-        System.out.println("🔥 RAG STARTED");
-        System.out.println("User Query: " + question);
-
         User user = userRepository.findByUsername(username).orElse(null);
 
-        List<String> topChunks;
-
         try {
-            System.out.println("⚡ Generating embedding...");
-            var embedding = embeddingService.embed(question);
+            // 1️⃣ Generate query embedding
+            var queryEmbedding = embeddingService.embed(question);
+            float[] queryVector = queryEmbedding.vector();
 
-            float[] vector = embedding.vector();
-            String vectorString = convertToVectorString(vector);
+            // 2️⃣ Get user's documents
+            List<Document> docs = documentRepository.findByUserUsername(username);
 
-            System.out.println("⚠ Using fallback vector search...");
+            if (docs.isEmpty()) {
+                return "⚠ No documents uploaded.";
+            }
 
-            // ✅ TEMP SAFE DATA (NO CRASH)
-            topChunks = embeddingRepository.findTop3SimilarByUser(vectorString);
+            List<Long> docIds = docs.stream()
+                    .map(Document::getId)
+                    .toList();
 
-            System.out.println("📄 Results: " + topChunks.size());
+            // 3️⃣ Get embeddings
+            List<DocumentEmbedding> embeddings =
+                    embeddingRepository.findByDocumentIdIn(docIds);
+
+            if (embeddings.isEmpty()) {
+                return "⚠ No embeddings found.";
+            }
+
+            // 4️⃣ Similarity search
+            List<String> topChunks = embeddings.stream()
+                    .sorted((a, b) -> {
+                        float simA = similarity(queryVector, stringToVector(a.getEmbedding()));
+                        float simB = similarity(queryVector, stringToVector(b.getEmbedding()));
+                        return Float.compare(simB, simA);
+                    })
+                    .limit(3)
+                    .map(DocumentEmbedding::getChunkText)
+                    .collect(Collectors.toList());
+
+            String context = String.join("\n\n", topChunks);
+
+            String prompt =
+                    "Answer ONLY from the context.\n" +
+                    "If not found, say 'Not found in document'.\n\n" +
+                    "Context:\n" + context +
+                    "\n\nQuestion:\n" + question +
+                    "\nAnswer:";
+
+            String answer = chatModel.generate(prompt);
+
+            // Save history
+            if (user != null) {
+                ChatHistory chat = new ChatHistory();
+                chat.setQuestion(question);
+                chat.setAnswer(answer);
+                chat.setTimestamp(LocalDateTime.now());
+                chat.setUser(user);
+                chatHistoryRepository.save(chat);
+            }
+
+            return answer;
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Vector error: " + e.getMessage();
+            return "❌ Error processing request";
         }
-
-        if (topChunks == null || topChunks.isEmpty()) {
-            return "⚠ No documents found. Please upload a file.";
-        }
-
-        StringBuilder context = new StringBuilder();
-        for (String chunk : topChunks) {
-            context.append(chunk).append("\n\n");
-        }
-
-       String prompt =
-        "You are DocuMind AI.\n\n" +
-        "Answer ONLY using the given context.\n" +
-        "If answer is not present, say 'Not found in document'.\n" +
-        "Answer clearly in bullet points.\n\n" +
-        "Context:\n" + context +
-        "\nQuestion:\n" + question +
-        "\nAnswer:";
-
-                String answer;
-
-         try {
-    System.out.println("🤖 Calling OpenRouter...");
-    answer = chatModel.generate(prompt);
-    System.out.println("✅ AI Response received");
-
-} catch (Exception e) {
-    e.printStackTrace();
-    return "❌ Chat error: " + e.getMessage();
-}
-        
-        if (user != null) {
-            ChatHistory chat = new ChatHistory();
-            chat.setQuestion(question);
-            chat.setAnswer(answer);
-            chat.setTimestamp(LocalDateTime.now());
-            chat.setUser(user);
-            chatHistoryRepository.save(chat);
-        }
-
-        return answer;
     }
 
-    private String convertToVectorString(float[] vector) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < vector.length; i++) {
-            sb.append(vector[i]);
-            if (i < vector.length - 1) sb.append(",");
+    private float similarity(float[] v1, float[] v2) {
+        float sum = 0;
+        for (int i = 0; i < v1.length; i++) {
+            sum += v1[i] * v2[i];
         }
-        sb.append("]");
-        return sb.toString();
+        return sum;
+    }
+
+    private float[] stringToVector(String str) {
+        str = str.replace("[", "").replace("]", "");
+        String[] parts = str.split(",");
+
+        float[] vector = new float[parts.length];
+
+        for (int i = 0; i < parts.length; i++) {
+            vector[i] = Float.parseFloat(parts[i]);
+        }
+
+        return vector;
     }
 }
