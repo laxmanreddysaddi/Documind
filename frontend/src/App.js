@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-// ✅ FIXED BASE URL
+// ✅ BASE URL (ENV + FALLBACK)
 const BASE_URL =
   process.env.REACT_APP_API_URL ||
   "https://documind-backend-30m4.onrender.com/api";
@@ -13,14 +13,24 @@ export default function App() {
   const [username, setUsername] = useState(localStorage.getItem("username") || "");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token") || "");
+  const [authLoading, setAuthLoading] = useState(false);
 
   // 💬 CHAT
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // 📤 UPLOAD
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
   const textareaRef = useRef(null);
   const chatEndRef = useRef(null);
+
+  // 🔥 Wake backend (reduce delay)
+  useEffect(() => {
+    fetch(`${BASE_URL}/chat?question=hi&username=test`).catch(() => {});
+  }, []);
 
   // 🔽 Auto scroll
   useEffect(() => {
@@ -38,7 +48,14 @@ export default function App() {
 
   // 🔐 AUTH
   const handleAuth = async () => {
+    if (!username || !password) {
+      alert("Enter username & password");
+      return;
+    }
+
     try {
+      setAuthLoading(true);
+
       const url = isLogin
         ? `${BASE_URL}/auth/login`
         : `${BASE_URL}/auth/register`;
@@ -53,12 +70,14 @@ export default function App() {
         localStorage.setItem("username", username);
 
       } else {
-        alert("Registered! Now login");
+        alert("✅ Registered! Now login");
         setIsLogin(true);
       }
 
     } catch (err) {
-      alert("❌ Auth Error: " + (err.response?.data || err.message));
+      alert("❌ " + (err.response?.data || err.message));
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -72,17 +91,14 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await axios.get(
-        `${BASE_URL}/chat`,
-        {
-          params: { question, username }, // ✅ FIXED
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const res = await axios.get(`${BASE_URL}/chat`, {
+        params: { question, username },
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: res.data }
+        { role: "ai", text: res.data },
       ]);
 
     } catch (err) {
@@ -100,10 +116,18 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (file.size > 5 * 1024 * 1024) {
+      alert("❌ File too large (max 5MB)");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
     try {
+      setUploading(true);
+      setProgress(0);
+
       await axios.post(
         `${BASE_URL}/documents/upload`,
         formData,
@@ -111,13 +135,21 @@ export default function App() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          onUploadProgress: (event) => {
+            const percent = Math.round(
+              (event.loaded * 100) / event.total
+            );
+            setProgress(percent);
+          },
         }
       );
 
-      alert("✅ Uploaded successfully");
+      alert("✅ Uploaded! Processing document...");
 
     } catch (err) {
       alert("❌ Upload failed");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -154,9 +186,18 @@ export default function App() {
 
             <button
               onClick={handleAuth}
-              className="w-full bg-blue-600 text-white p-2 rounded"
+              disabled={authLoading}
+              className={`w-full p-2 rounded text-white ${
+                authLoading ? "bg-gray-400" : "bg-blue-600"
+              }`}
             >
-              {isLogin ? "Login" : "Register"}
+              {authLoading
+                ? isLogin
+                  ? "Logging in..."
+                  : "Registering..."
+                : isLogin
+                ? "Login"
+                : "Register"}
             </button>
 
             <p
@@ -190,10 +231,27 @@ export default function App() {
           + New Chat
         </button>
 
+        {/* Upload */}
         <label className="cursor-pointer bg-gray-500 text-white p-2 rounded w-full text-center block">
-          Upload File
-          <input type="file" className="hidden" onChange={uploadFile} />
+          {uploading ? `Uploading... ${progress}%` : "Upload File"}
+
+          <input
+            type="file"
+            className="hidden"
+            onChange={uploadFile}
+            disabled={uploading}
+          />
         </label>
+
+        {/* Progress Bar */}
+        {uploading && (
+          <div className="mt-3 w-full bg-gray-700 rounded">
+            <div
+              className="bg-blue-500 h-2 rounded"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
 
         <button
           className="mt-4 w-full bg-red-600 text-white p-2 rounded"
@@ -209,29 +267,53 @@ export default function App() {
       {/* CHAT */}
       <div className="flex flex-col flex-1">
 
+        {/* Messages */}
         <div className="flex-1 p-6 overflow-y-auto">
           {messages.map((msg, i) => (
-            <div key={i} className={`mb-4 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-xl px-4 py-3 rounded-2xl ${
+            <div
+              key={i}
+              className={`mb-4 flex ${
                 msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-800 text-white"
-              }`}>
+                  ? "justify-end"
+                  : "justify-start"
+              }`}
+            >
+              <div
+                className={`max-w-xl px-4 py-3 rounded-2xl ${
+                  msg.role === "user"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-800 text-white"
+                }`}
+              >
                 {msg.text}
               </div>
             </div>
           ))}
 
-          {loading && <div className="text-gray-400">🤖 Thinking...</div>}
+          {loading && (
+            <div className="text-gray-400">🤖 Thinking...</div>
+          )}
 
           <div ref={chatEndRef} />
         </div>
 
+        {/* Input */}
         <div className="p-4 flex">
-          <input
-            className="flex-1 p-3 rounded-xl"
+
+          <textarea
+            ref={textareaRef}
+            className="flex-1 p-3 rounded-xl resize-none"
             value={question}
+            placeholder="Ask about your document..."
             onChange={(e) => setQuestion(e.target.value)}
+
+            // ✅ ENTER TO SEND
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
           />
 
           <button
@@ -240,8 +322,8 @@ export default function App() {
           >
             Send
           </button>
-        </div>
 
+        </div>
       </div>
     </div>
   );
