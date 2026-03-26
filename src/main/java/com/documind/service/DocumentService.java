@@ -25,9 +25,11 @@ public class DocumentService {
         this.embeddingRepository = embeddingRepository;
     }
 
+    // 🚀 MAIN METHOD
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         try {
+            // 1️⃣ Save document metadata
             Document doc = new Document();
             doc.setFileName(file.getOriginalFilename());
             doc.setFileSize(file.getSize());
@@ -36,10 +38,16 @@ public class DocumentService {
 
             documentRepository.save(doc);
 
-            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            // 2️⃣ Extract text (PDF / DOCX / TXT)
+            String content = extractText(file);
 
+            System.out.println("📄 Content preview: " +
+                    content.substring(0, Math.min(200, content.length())));
+
+            // 3️⃣ Split into chunks
             String[] chunks = content.split("\\. ");
 
+            // 4️⃣ Generate embeddings
             for (String chunk : chunks) {
 
                 if (chunk.trim().isEmpty()) continue;
@@ -54,18 +62,67 @@ public class DocumentService {
                 embeddingRepository.save(de);
             }
 
-            System.out.println("✅ Embeddings saved");
+            System.out.println("✅ Embeddings saved successfully");
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Upload failed");
+            throw new RuntimeException("❌ File processing failed");
         }
     }
 
-    public List<Document> getDocumentsByUser(String username) {
-        return documentRepository.findByUserUsername(username);
+    // 🔥 TEXT EXTRACTION METHOD
+    private String extractText(MultipartFile file) {
+
+        try {
+            String fileName = file.getOriginalFilename().toLowerCase();
+
+            // ✅ TXT
+            if (fileName.endsWith(".txt")) {
+                return new String(file.getBytes(), StandardCharsets.UTF_8);
+            }
+
+            // ✅ PDF
+            else if (fileName.endsWith(".pdf")) {
+
+                org.apache.pdfbox.pdmodel.PDDocument document =
+                        org.apache.pdfbox.pdmodel.PDDocument.load(file.getInputStream());
+
+                org.apache.pdfbox.text.PDFTextStripper stripper =
+                        new org.apache.pdfbox.text.PDFTextStripper();
+
+                String text = stripper.getText(document);
+                document.close();
+
+                return text;
+            }
+
+            // ✅ DOCX
+            else if (fileName.endsWith(".docx")) {
+
+                org.apache.poi.xwpf.usermodel.XWPFDocument doc =
+                        new org.apache.poi.xwpf.usermodel.XWPFDocument(file.getInputStream());
+
+                StringBuilder text = new StringBuilder();
+
+                for (org.apache.poi.xwpf.usermodel.XWPFParagraph para : doc.getParagraphs()) {
+                    text.append(para.getText()).append("\n");
+                }
+
+                doc.close();
+                return text.toString();
+            }
+
+            else {
+                throw new RuntimeException("❌ Unsupported file type");
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("❌ Failed to extract text");
+        }
     }
 
+    // 🔥 SIMPLE EMBEDDING (WORKING, NO API)
     private String generateSimpleEmbedding(String text) {
 
         float[] vector = new float[10];
@@ -82,5 +139,10 @@ public class DocumentService {
         sb.append("]");
 
         return sb.toString();
+    }
+
+    // ✅ GET USER DOCUMENTS
+    public List<Document> getDocumentsByUser(String username) {
+        return documentRepository.findByUserUsername(username);
     }
 }
