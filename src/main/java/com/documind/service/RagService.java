@@ -45,8 +45,7 @@ public class RagService {
             List<Long> docIds = docs.stream().map(Document::getId).toList();
 
             // 3️⃣ Get embeddings
-            List<DocumentEmbedding> embeddings =
-                    embeddingRepository.findByDocumentIdIn(docIds);
+            List<DocumentEmbedding> embeddings = embeddingRepository.findAll();
 
             if (embeddings.isEmpty()) {
                 return "⚠ No embeddings found.";
@@ -102,6 +101,9 @@ public class RagService {
             vector[i] = Float.parseFloat(parts[i]);
         }
 
+        System.out.println("📄 Doc IDs: " + docIds);
+System.out.println("📊 Total embeddings in DB: " + embeddingRepository.count());
+System.out.println("📊 Embeddings fetched: " + embeddings.size());
         return vector;
     }
 }
