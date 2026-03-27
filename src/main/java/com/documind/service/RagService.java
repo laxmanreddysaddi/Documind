@@ -46,12 +46,10 @@ public class RagService {
             List<Long> docIds = docs.stream().map(Document::getId).toList();
 
             // 🔥 IMPORTANT FIX (FILTER)
-            List<DocumentEmbedding> embeddings = embeddingRepository.findAll()
-                    .stream()
-                    .filter(e -> docIds.contains(e.getDocumentId()))
-                    .toList();
+            List<DocumentEmbedding> embeddings =
+        embeddingRepository.findByDocumentIdIn(docIds);
 
-            System.out.println("📊 Embeddings fetched: " + embeddings.size());
+System.out.println("📊 Embeddings fetched: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
                 return "⚠ No embeddings found.";
