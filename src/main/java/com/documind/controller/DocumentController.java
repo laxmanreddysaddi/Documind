@@ -19,22 +19,43 @@ public class DocumentController {
         this.documentService = documentService;
     }
 
-    // ✅ Upload (TEMP: no auth to avoid failure)
+    // =========================
+    // ✅ Upload Document
+    // =========================
     @PostMapping("/upload")
     public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file) {
 
         System.out.println("🔥 Upload API called");
 
-        if (file.isEmpty()) {
+        // ❌ Check empty file
+        if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body("❌ File is empty");
         }
 
+        // ❌ File size check (max 5MB)
+        if (file.getSize() > 5 * 1024 * 1024) {
+            return ResponseEntity.badRequest().body("❌ File too large (Max 5MB)");
+        }
+
+        // ❌ File type check
+        String fileName = file.getOriginalFilename();
+
+        if (fileName == null ||
+                !(fileName.toLowerCase().endsWith(".txt") ||
+                  fileName.toLowerCase().endsWith(".pdf") ||
+                  fileName.toLowerCase().endsWith(".docx"))) {
+
+            return ResponseEntity.badRequest()
+                    .body("❌ Only TXT, PDF, DOCX files are allowed");
+        }
+
         try {
-            String username = "testuser"; // 🔥 TEMP FIX
+            // 🔥 TEMP USER (until JWT is connected)
+            String username = "testuser";
 
             documentService.saveDocumentMetadata(file, username);
 
-            return ResponseEntity.ok("✅ Uploaded successfully");
+            return ResponseEntity.ok("✅ Document uploaded successfully");
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -43,14 +64,29 @@ public class DocumentController {
         }
     }
 
-    // ✅ Document history
+    // =========================
+    // ✅ Get Document History
+    // =========================
     @GetMapping("/history")
     public ResponseEntity<?> getDocumentHistory() {
 
-        String username = "testuser"; // 🔥 TEMP FIX
+        try {
+            // 🔥 TEMP USER
+            String username = "testuser";
 
-        List<Document> docs = documentService.getDocumentsByUser(username);
+            List<Document> documents =
+                    documentService.getDocumentsByUser(username);
 
-        return ResponseEntity.ok(docs);
+            if (documents.isEmpty()) {
+                return ResponseEntity.ok("📂 No documents uploaded yet");
+            }
+
+            return ResponseEntity.ok(documents);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError()
+                    .body("❌ Failed to fetch document history");
+        }
     }
 }

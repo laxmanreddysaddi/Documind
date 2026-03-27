@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface DocumentEmbeddingRepository extends JpaRepository<DocumentEmbedding, Long> {
 
-    List<DocumentEmbedding> findByDocumentIdIn(List<Long> docIds);
+    List<DocumentEmbedding> findByDocumentIdIn(List<Long> documentIds);
 }

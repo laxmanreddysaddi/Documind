@@ -9,27 +9,31 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.List; // ✅ FIXED
 
 @Service
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
     private final DocumentEmbeddingRepository embeddingRepository;
+    private final HuggingFaceEmbeddingService embeddingService;
 
     public DocumentService(
             DocumentRepository documentRepository,
-            DocumentEmbeddingRepository embeddingRepository
+            DocumentEmbeddingRepository embeddingRepository,
+            HuggingFaceEmbeddingService embeddingService
     ) {
         this.documentRepository = documentRepository;
         this.embeddingRepository = embeddingRepository;
+        this.embeddingService = embeddingService;
     }
 
-    // 🚀 MAIN METHOD
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         try {
-            // 1️⃣ Save document metadata
+            System.out.println("🔥 Processing document...");
+
+            // 1️⃣ Save document
             Document doc = new Document();
             doc.setFileName(file.getOriginalFilename());
             doc.setFileSize(file.getSize());
@@ -38,31 +42,31 @@ public class DocumentService {
 
             documentRepository.save(doc);
 
-            // 2️⃣ Extract text (PDF / DOCX / TXT)
-            String content = extractText(file);
-
-            System.out.println("📄 Content preview: " +
-                    content.substring(0, Math.min(200, content.length())));
+            // 2️⃣ Read content
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
 
             // 3️⃣ Split into chunks
             String[] chunks = content.split("\\. ");
 
-            // 4️⃣ Generate embeddings
+            int count = 0;
+
             for (String chunk : chunks) {
 
                 if (chunk.trim().isEmpty()) continue;
 
-                String vector = generateSimpleEmbedding(chunk);
+                float[] vector = embeddingService.embed(chunk).vector();
+                String vectorString = convertToVectorString(vector);
 
                 DocumentEmbedding de = new DocumentEmbedding();
                 de.setChunkText(chunk);
-                de.setEmbedding(vector);
+                de.setEmbedding(vectorString);
                 de.setDocumentId(doc.getId());
 
                 embeddingRepository.save(de);
+                count++;
             }
 
-            System.out.println("✅ Embeddings saved successfully");
+            System.out.println("✅ Saved embeddings: " + count);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -70,79 +74,18 @@ public class DocumentService {
         }
     }
 
-    // 🔥 TEXT EXTRACTION METHOD
-    private String extractText(MultipartFile file) {
-
-        try {
-            String fileName = file.getOriginalFilename().toLowerCase();
-
-            // ✅ TXT
-            if (fileName.endsWith(".txt")) {
-                return new String(file.getBytes(), StandardCharsets.UTF_8);
-            }
-
-            // ✅ PDF
-            else if (fileName.endsWith(".pdf")) {
-
-                org.apache.pdfbox.pdmodel.PDDocument document =
-                        org.apache.pdfbox.pdmodel.PDDocument.load(file.getInputStream());
-
-                org.apache.pdfbox.text.PDFTextStripper stripper =
-                        new org.apache.pdfbox.text.PDFTextStripper();
-
-                String text = stripper.getText(document);
-                document.close();
-
-                return text;
-            }
-
-            // ✅ DOCX
-            else if (fileName.endsWith(".docx")) {
-
-                org.apache.poi.xwpf.usermodel.XWPFDocument doc =
-                        new org.apache.poi.xwpf.usermodel.XWPFDocument(file.getInputStream());
-
-                StringBuilder text = new StringBuilder();
-
-                for (org.apache.poi.xwpf.usermodel.XWPFParagraph para : doc.getParagraphs()) {
-                    text.append(para.getText()).append("\n");
-                }
-
-                doc.close();
-                return text.toString();
-            }
-
-            else {
-                throw new RuntimeException("❌ Unsupported file type");
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("❌ Failed to extract text");
-        }
+    // ✅ FIXED METHOD
+    public List<Document> getDocumentsByUser(String username) {
+        return documentRepository.findByUserUsername(username);
     }
 
-    // 🔥 SIMPLE EMBEDDING (WORKING, NO API)
-    private String generateSimpleEmbedding(String text) {
-
-        float[] vector = new float[10];
-
-        for (int i = 0; i < text.length(); i++) {
-            vector[i % 10] += text.charAt(i);
-        }
-
+    private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
             sb.append(vector[i]);
             if (i < vector.length - 1) sb.append(",");
         }
         sb.append("]");
-
         return sb.toString();
-    }
-
-    // ✅ GET USER DOCUMENTS
-    public List<Document> getDocumentsByUser(String username) {
-        return documentRepository.findByUserUsername(username);
     }
 }

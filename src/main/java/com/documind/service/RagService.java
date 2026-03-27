@@ -8,74 +8,100 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class RagService {
 
+    private final HuggingFaceEmbeddingService embeddingService;
     private final DocumentEmbeddingRepository embeddingRepository;
     private final DocumentRepository documentRepository;
     private final ChatLanguageModel chatModel;
 
     public RagService(
+            HuggingFaceEmbeddingService embeddingService,
             DocumentEmbeddingRepository embeddingRepository,
             DocumentRepository documentRepository,
             ChatLanguageModel chatModel
     ) {
+        this.embeddingService = embeddingService;
         this.embeddingRepository = embeddingRepository;
         this.documentRepository = documentRepository;
         this.chatModel = chatModel;
     }
 
-  public String ask(String question, String username) {
+    public String ask(String question, String username) {
 
-    System.out.println("🔥 RAG STARTED: " + question);
-
-    try {
-
-        // 1️⃣ Get user documents
-        List<Document> docs = documentRepository.findByUserUsername(username);
-
-        if (docs.isEmpty()) {
-            return "⚠ Please upload a document first.";
-        }
-
-        List<Long> docIds = docs.stream()
-                .map(Document::getId)
-                .toList();
-
-        // 2️⃣ Get embeddings
-        List<DocumentEmbedding> embeddings =
-                embeddingRepository.findByDocumentIdIn(docIds);
-
-        if (embeddings.isEmpty()) {
-            return "⚠ Document processed but no embeddings found.";
-        }
-
-        // 3️⃣ Build context (NO VECTOR SEARCH TEMP)
-        StringBuilder context = new StringBuilder();
-
-        for (DocumentEmbedding e : embeddings) {
-            context.append(e.getChunkText()).append("\n\n");
-        }
-
-        // 4️⃣ Prompt
-        String prompt =
-                "Answer only from the context.\n\n" +
-                context +
-                "\nQuestion: " + question;
-
-        // 5️⃣ Call AI safely
         try {
+            // 1️⃣ Query embedding
+            float[] queryVector = embeddingService.embed(question).vector();
+
+            // 2️⃣ Get documents
+            List<Document> docs = documentRepository.findByUserUsername(username);
+
+            if (docs.isEmpty()) {
+                return "⚠ Please upload a document first.";
+            }
+
+            List<Long> docIds = docs.stream().map(Document::getId).toList();
+
+            // 3️⃣ Get embeddings
+            List<DocumentEmbedding> embeddings =
+                    embeddingRepository.findByDocumentIdIn(docIds);
+
+            if (embeddings.isEmpty()) {
+                return "⚠ No embeddings found.";
+            }
+
+            // 4️⃣ Find top chunks
+            List<String> topChunks = embeddings.stream()
+                    .sorted((a, b) -> Float.compare(
+                            cosineSimilarity(queryVector, stringToVector(b.getEmbedding())),
+                            cosineSimilarity(queryVector, stringToVector(a.getEmbedding()))
+                    ))
+                    .limit(3)
+                    .map(DocumentEmbedding::getChunkText)
+                    .toList();
+
+            // 5️⃣ Context
+            StringBuilder context = new StringBuilder();
+            for (String chunk : topChunks) {
+                context.append(chunk).append("\n\n");
+            }
+
+            String prompt =
+                    "Answer only from context:\n\n" +
+                    context +
+                    "\nQuestion: " + question;
+
             return chatModel.generate(prompt);
+
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ AI model failed";
+            return "❌ Error: " + e.getMessage();
+        }
+    }
+
+    private float cosineSimilarity(float[] a, float[] b) {
+        float dot = 0, normA = 0, normB = 0;
+
+        for (int i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
         }
 
-    } catch (Exception e) {
-        e.printStackTrace();
-        return "❌ Backend crash: " + e.getMessage();
+        return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
-}
+
+    private float[] stringToVector(String str) {
+        str = str.replace("[", "").replace("]", "");
+        String[] parts = str.split(",");
+
+        float[] vector = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            vector[i] = Float.parseFloat(parts[i]);
+        }
+
+        return vector;
+    }
 }
