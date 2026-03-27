@@ -4,17 +4,11 @@ import com.documind.model.Document;
 import com.documind.model.DocumentEmbedding;
 import com.documind.repository.DocumentEmbeddingRepository;
 import com.documind.repository.DocumentRepository;
-
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.List; // ✅ FIXED
 
 @Service
 public class DocumentService {
@@ -38,44 +32,21 @@ public class DocumentService {
         try {
             System.out.println("🔥 Processing document...");
 
-            // 1️⃣ Save document
+            // ✅ SAVE DOCUMENT (IMPORTANT FIX)
             Document doc = new Document();
             doc.setFileName(file.getOriginalFilename());
             doc.setFileSize(file.getSize());
             doc.setUserUsername(username);
             doc.setUploadedAt(LocalDateTime.now());
 
-            documentRepository.save(doc);
+            Document savedDoc = documentRepository.save(doc);
 
-            // 2️⃣ Read content
-            String content;
+            // ✅ READ CONTENT
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
 
-String fileName = file.getOriginalFilename();
+            System.out.println("📄 Content length: " + content.length());
 
-if (fileName.endsWith(".txt")) {
-
-    content = new String(file.getBytes(), StandardCharsets.UTF_8);
-
-} else if (fileName.endsWith(".pdf")) {
-
-    try (PDDocument pdf = PDDocument.load(file.getInputStream())) {
-        PDFTextStripper stripper = new PDFTextStripper();
-        content = stripper.getText(pdf);
-    }
-
-} else if (fileName.endsWith(".docx")) {
-
-    try (XWPFDocument docx = new XWPFDocument(file.getInputStream())) {
-        XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
-        content = extractor.getText();
-        System.out.println("📄 Extracted content length: " + content.length());
-    }
-
-} else {
-    throw new RuntimeException("Unsupported file type");
-}
-
-            // 3️⃣ Split into chunks
+            // ✅ SPLIT
             String[] chunks = content.split("\\. ");
 
             int count = 0;
@@ -90,7 +61,9 @@ if (fileName.endsWith(".txt")) {
                 DocumentEmbedding de = new DocumentEmbedding();
                 de.setChunkText(chunk);
                 de.setEmbedding(vectorString);
-                de.setDocumentId(doc.getId());
+
+                // 🔥 IMPORTANT FIX
+                de.setDocumentId(savedDoc.getId());
 
                 embeddingRepository.save(de);
                 count++;
@@ -104,11 +77,6 @@ if (fileName.endsWith(".txt")) {
         }
     }
 
-    // ✅ FIXED METHOD
-    public List<Document> getDocumentsByUser(String username) {
-        return documentRepository.findByUserUsername(username);
-    }
-
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
@@ -117,5 +85,10 @@ if (fileName.endsWith(".txt")) {
         }
         sb.append("]");
         return sb.toString();
+    }
+
+    // ✅ REQUIRED FOR HISTORY
+    public java.util.List<Document> getDocumentsByUser(String username) {
+        return documentRepository.findByUserUsername(username);
     }
 }
