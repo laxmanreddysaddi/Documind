@@ -79,18 +79,22 @@ public class RagService {
             return "❌ Error: " + e.getMessage();
         }
     }
+private float cosineSimilarity(float[] a, float[] b) {
 
-    private float cosineSimilarity(float[] a, float[] b) {
-        float dot = 0, normA = 0, normB = 0;
+    int length = Math.min(a.length, b.length); // ✅ FIX
 
-        for (int i = 0; i < a.length; i++) {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
+    float dot = 0, normA = 0, normB = 0;
 
-        return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
+    for (int i = 0; i < length; i++) {
+        dot += a[i] * b[i];
+        normA += a[i] * a[i];
+        normB += b[i] * b[i];
     }
+
+    if (normA == 0 || normB == 0) return 0;
+
+    return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
+}
 
     private float[] stringToVector(String str) {
         str = str.replace("[", "").replace("]", "");
