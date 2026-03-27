@@ -4,6 +4,11 @@ import com.documind.model.Document;
 import com.documind.model.DocumentEmbedding;
 import com.documind.repository.DocumentEmbeddingRepository;
 import com.documind.repository.DocumentRepository;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -43,7 +48,32 @@ public class DocumentService {
             documentRepository.save(doc);
 
             // 2️⃣ Read content
-            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+            String content;
+
+String fileName = file.getOriginalFilename();
+
+if (fileName.endsWith(".txt")) {
+
+    content = new String(file.getBytes(), StandardCharsets.UTF_8);
+
+} else if (fileName.endsWith(".pdf")) {
+
+    try (PDDocument pdf = PDDocument.load(file.getInputStream())) {
+        PDFTextStripper stripper = new PDFTextStripper();
+        content = stripper.getText(pdf);
+    }
+
+} else if (fileName.endsWith(".docx")) {
+
+    try (XWPFDocument docx = new XWPFDocument(file.getInputStream())) {
+        XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
+        content = extractor.getText();
+        System.out.println("📄 Extracted content length: " + content.length());
+    }
+
+} else {
+    throw new RuntimeException("Unsupported file type");
+}
 
             // 3️⃣ Split into chunks
             String[] chunks = content.split("\\. ");
