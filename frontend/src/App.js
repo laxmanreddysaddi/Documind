@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-// ✅ BASE URL
 const BASE_URL =
   process.env.REACT_APP_API_URL ||
   "https://documind-backend-30m4.onrender.com/api";
@@ -23,9 +22,7 @@ export default function App() {
   // 📤 UPLOAD
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  useEffect(() => {
-  console.log("Upload progress:", progress);
-}, [progress]);
+
   const textareaRef = useRef(null);
   const chatEndRef = useRef(null);
 
@@ -65,7 +62,6 @@ export default function App() {
         setToken(tokenValue);
         localStorage.setItem("token", tokenValue);
         localStorage.setItem("username", username);
-
       } else {
         alert("✅ Registered! Now login");
         setIsLogin(true);
@@ -84,12 +80,16 @@ export default function App() {
 
     const userMsg = { role: "user", text: question };
     setMessages((prev) => [...prev, userMsg]);
+
     setQuestion("");
     setLoading(true);
 
     try {
       const res = await axios.get(`${BASE_URL}/chat`, {
         params: { question, username },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       });
 
       setMessages((prev) => [
@@ -107,7 +107,7 @@ export default function App() {
     setLoading(false);
   };
 
-  // 📤 FILE UPLOAD (FIXED)
+  // 📤 FILE UPLOAD
   const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -123,6 +123,9 @@ export default function App() {
         `${BASE_URL}/documents/upload`,
         formData,
         {
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
           onUploadProgress: (event) => {
             const percent = Math.round((event.loaded * 100) / event.total);
             setProgress(percent);
@@ -175,11 +178,7 @@ export default function App() {
               disabled={authLoading}
               className="w-full p-2 rounded text-white bg-blue-600"
             >
-              {authLoading
-                ? "Please wait..."
-                : isLogin
-                ? "Login"
-                : "Register"}
+              {authLoading ? "Please wait..." : isLogin ? "Login" : "Register"}
             </button>
 
             <p
@@ -252,14 +251,28 @@ export default function App() {
         {/* Messages */}
         <div className="flex-1 p-6 overflow-y-auto">
           {messages.map((msg, i) => (
-            <div key={i} className={`mb-4 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-xl px-4 py-3 rounded-2xl ${msg.role === "user" ? "bg-blue-600" : "bg-gray-800"}`}>
-                {msg.text}
+            <div
+              key={i}
+              className={`mb-4 flex ${
+                msg.role === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
+              <div
+                className={`max-w-xl px-4 py-3 rounded-2xl shadow-md ${
+                  msg.role === "user"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-800 text-white"
+                }`}
+              >
+                <div className="whitespace-pre-line">{msg.text}</div>
               </div>
             </div>
           ))}
 
-          {loading && <div className="text-gray-400">🤖 Thinking...</div>}
+          {loading && (
+            <div className="text-gray-400">🤖 Thinking...</div>
+          )}
+
           <div ref={chatEndRef} />
         </div>
 
@@ -270,7 +283,7 @@ export default function App() {
             ref={textareaRef}
             className="flex-1 p-3 rounded-xl resize-none"
             value={question}
-            placeholder="Ask about your document..."
+            placeholder="Ask something..."
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -282,7 +295,7 @@ export default function App() {
 
           <button
             onClick={sendMessage}
-            className="ml-3 bg-blue-600 px-5 py-2 rounded-xl"
+            className="ml-3 bg-blue-600 px-5 py-2 rounded-xl text-white"
           >
             Send
           </button>
