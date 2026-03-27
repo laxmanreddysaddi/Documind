@@ -100,10 +100,6 @@ public class RagService {
         for (int i = 0; i < parts.length; i++) {
             vector[i] = Float.parseFloat(parts[i]);
         }
-
-        System.out.println("📄 Doc IDs: " + docIds);
-System.out.println("📊 Total embeddings in DB: " + embeddingRepository.count());
-System.out.println("📊 Embeddings fetched: " + embeddings.size());
         return vector;
     }
 }
