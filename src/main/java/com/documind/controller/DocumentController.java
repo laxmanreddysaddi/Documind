@@ -23,21 +23,24 @@ public class DocumentController {
     // ✅ Upload Document
     // =========================
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadDocument(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam String username // 🔥 IMPORTANT FIX
+    ) {
 
         System.out.println("🔥 Upload API called");
 
-        // ❌ Check empty file
+        // ❌ Empty file
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body("❌ File is empty");
         }
 
-        // ❌ File size check (max 5MB)
+        // ❌ File size (5MB)
         if (file.getSize() > 5 * 1024 * 1024) {
             return ResponseEntity.badRequest().body("❌ File too large (Max 5MB)");
         }
 
-        // ❌ File type check
+        // ❌ File type
         String fileName = file.getOriginalFilename();
 
         if (fileName == null ||
@@ -50,9 +53,15 @@ public class DocumentController {
         }
 
         try {
-            // 🔥 TEMP USER (until JWT is connected)
-            String username = "testuser";
 
+            // ✅ DUPLICATE CHECK
+            boolean exists = documentService.isFileAlreadyExists(fileName, username);
+
+            if (exists) {
+                return ResponseEntity.ok("⚠ File already uploaded");
+            }
+
+            // ✅ SAVE
             documentService.saveDocumentMetadata(file, username);
 
             return ResponseEntity.ok("✅ Document uploaded successfully");
@@ -68,18 +77,13 @@ public class DocumentController {
     // ✅ Get Document History
     // =========================
     @GetMapping("/history")
-    public ResponseEntity<?> getDocumentHistory() {
+    public ResponseEntity<?> getDocumentHistory(
+            @RequestParam String username // 🔥 FIX
+    ) {
 
         try {
-            // 🔥 TEMP USER
-            String username = "testuser";
-
             List<Document> documents =
                     documentService.getDocumentsByUser(username);
-
-            if (documents.isEmpty()) {
-                return ResponseEntity.ok("📂 No documents uploaded yet");
-            }
 
             return ResponseEntity.ok(documents);
 

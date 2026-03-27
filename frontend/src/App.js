@@ -5,6 +5,23 @@ const BASE_URL =
   process.env.REACT_APP_API_URL ||
   "https://documind-backend-30m4.onrender.com/api";
 
+// ✅ AXIOS INSTANCE WITH AUTO LOGOUT
+const api = axios.create({
+  baseURL: BASE_URL,
+});
+
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response && err.response.status === 401) {
+      alert("Session expired. Please login again.");
+      localStorage.clear();
+      window.location.reload();
+    }
+    return Promise.reject(err);
+  }
+);
+
 export default function App() {
 
   // 🔐 AUTH
@@ -23,8 +40,29 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  // 📂 DOCUMENTS
+  const [documents, setDocuments] = useState([]);
+
   const textareaRef = useRef(null);
   const chatEndRef = useRef(null);
+
+  // =========================
+  // 🔄 SESSION EXPIRY CHECK
+  // =========================
+  useEffect(() => {
+    const loginTime = localStorage.getItem("loginTime");
+
+    if (loginTime) {
+      const now = Date.now();
+      const ONE_HOUR = 60 * 60 * 1000;
+
+      if (now - loginTime > ONE_HOUR) {
+        alert("Session expired. Please login again.");
+        localStorage.clear();
+        setToken("");
+      }
+    }
+  }, []);
 
   // 🔽 Auto scroll
   useEffect(() => {
@@ -40,7 +78,9 @@ export default function App() {
     }
   }, [question]);
 
+  // =========================
   // 🔐 AUTH
+  // =========================
   const handleAuth = async () => {
     if (!username || !password) {
       alert("Enter username & password");
@@ -50,11 +90,9 @@ export default function App() {
     try {
       setAuthLoading(true);
 
-      const url = isLogin
-        ? `${BASE_URL}/auth/login`
-        : `${BASE_URL}/auth/register`;
+      const url = isLogin ? "/auth/login" : "/auth/register";
 
-      const res = await axios.post(url, { username, password });
+      const res = await api.post(url, { username, password });
 
       if (isLogin) {
         const tokenValue = res.data.token || res.data;
@@ -62,6 +100,7 @@ export default function App() {
         setToken(tokenValue);
         localStorage.setItem("token", tokenValue);
         localStorage.setItem("username", username);
+        localStorage.setItem("loginTime", Date.now()); // 🔥 SAVE TIME
       } else {
         alert("✅ Registered! Now login");
         setIsLogin(true);
@@ -74,7 +113,29 @@ export default function App() {
     }
   };
 
+  // =========================
+  // 📂 FETCH DOCUMENTS
+  // =========================
+  const fetchDocuments = async () => {
+    try {
+      const res = await api.get("/documents/history", {
+        params: { username },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setDocuments(res.data || []);
+    } catch {
+      console.log("Failed to fetch documents");
+    }
+  };
+
+  useEffect(() => {
+    if (token) fetchDocuments();
+  }, [token]);
+
+  // =========================
   // 💬 SEND MESSAGE
+  // =========================
   const sendMessage = async () => {
     if (!question.trim()) return;
 
@@ -85,11 +146,9 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await axios.get(`${BASE_URL}/chat`, {
+      const res = await api.get("/chat", {
         params: { question, username },
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       setMessages((prev) => [
@@ -97,7 +156,7 @@ export default function App() {
         { role: "ai", text: res.data },
       ]);
 
-    } catch (err) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         { role: "ai", text: "❌ Error getting response" },
@@ -107,42 +166,42 @@ export default function App() {
     setLoading(false);
   };
 
+  // =========================
   // 📤 FILE UPLOAD
+  // =========================
   const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("username", username);
 
     try {
       setUploading(true);
       setProgress(0);
 
-      await axios.post(
-        `${BASE_URL}/documents/upload`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
-          onUploadProgress: (event) => {
-            const percent = Math.round((event.loaded * 100) / event.total);
-            setProgress(percent);
-          },
-        }
-      );
+      await api.post("/documents/upload", formData, {
+        headers: { Authorization: `Bearer ${token}` },
+        onUploadProgress: (event) => {
+          const percent = Math.round((event.loaded * 100) / event.total);
+          setProgress(percent);
+        },
+      });
 
       alert("✅ Uploaded successfully");
+      fetchDocuments();
 
-    } catch (err) {
+    } catch {
       alert("❌ Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
+  // =========================
   // 🔐 LOGIN UI
+  // =========================
   if (!token) {
     return (
       <div className="flex h-screen">
@@ -196,12 +255,14 @@ export default function App() {
     );
   }
 
+  // =========================
   // 💬 CHAT UI
+  // =========================
   return (
     <div className="flex h-screen bg-[#0f172a]">
 
       {/* SIDEBAR */}
-      <div className="w-64 bg-[#020617] text-white p-4">
+      <div className="w-64 bg-[#020617] text-white p-4 flex flex-col">
 
         <h2 className="text-xl font-bold mb-4">🤖 DocuMind</h2>
 
@@ -224,7 +285,7 @@ export default function App() {
           />
         </label>
 
-        {/* Progress Bar */}
+        {/* Progress */}
         {uploading && (
           <div className="mt-3 w-full bg-gray-700 rounded">
             <div
@@ -233,6 +294,21 @@ export default function App() {
             />
           </div>
         )}
+
+        {/* 📂 DOCUMENTS */}
+        <div className="mt-6 flex-1 overflow-y-auto">
+          <h3 className="text-sm text-gray-400 mb-2">📂 Documents</h3>
+
+          {documents.length === 0 ? (
+            <p className="text-gray-500 text-sm">No documents</p>
+          ) : (
+            documents.map((doc, i) => (
+              <div key={i} className="bg-gray-800 p-2 rounded mb-2 text-sm">
+                📄 {doc.fileName}
+              </div>
+            ))
+          )}
+        </div>
 
         <button
           className="mt-4 w-full bg-red-600 p-2 rounded"
@@ -248,42 +324,29 @@ export default function App() {
       {/* CHAT */}
       <div className="flex flex-col flex-1">
 
-        {/* Messages */}
         <div className="flex-1 p-6 overflow-y-auto">
           {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`mb-4 flex ${
-                msg.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-xl px-4 py-3 rounded-2xl shadow-md ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-800 text-white"
-                }`}
-              >
-                <div className="whitespace-pre-line">{msg.text}</div>
+            <div key={i} className={`mb-4 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-xl px-4 py-3 rounded-2xl ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-800 text-white"
+              }`}>
+                {msg.text}
               </div>
             </div>
           ))}
 
-          {loading && (
-            <div className="text-gray-400">🤖 Thinking...</div>
-          )}
+          {loading && <div className="text-gray-400">🤖 Thinking...</div>}
 
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input */}
         <div className="p-4 flex">
-
           <textarea
             ref={textareaRef}
             className="flex-1 p-3 rounded-xl resize-none"
             value={question}
-            placeholder="Ask something..."
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -299,7 +362,6 @@ export default function App() {
           >
             Send
           </button>
-
         </div>
       </div>
     </div>

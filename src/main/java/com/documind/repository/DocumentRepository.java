@@ -11,4 +11,6 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     // Fetch documents by username
     List<Document> findByUserUsername(String username);
+      // ✅ NEW
+    boolean existsByFileNameAndUserUsername(String fileName, String username);
 }
