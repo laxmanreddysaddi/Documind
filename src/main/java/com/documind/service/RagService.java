@@ -34,9 +34,10 @@ public class RagService {
         try {
             System.out.println("🔥 RAG STARTED");
 
+            // ✅ 1. Query embedding
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // ✅ GET USER DOCUMENTS
+            // ✅ 2. Get user documents
             List<Document> docs = documentRepository.findByUserUsername(username);
 
             if (docs.isEmpty()) {
@@ -44,18 +45,19 @@ public class RagService {
             }
 
             List<Long> docIds = docs.stream().map(Document::getId).toList();
+            System.out.println("📄 User Doc IDs: " + docIds);
 
-            // 🔥 IMPORTANT FIX (FILTER)
+            // ✅ 3. Fetch embeddings (FIXED)
             List<DocumentEmbedding> embeddings =
-        embeddingRepository.findByDocumentIdIn(docIds);
+                    embeddingRepository.findByDocumentIdIn(docIds);
 
-System.out.println("📊 Embeddings fetched: " + embeddings.size());
+            System.out.println("📊 Embeddings fetched: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
                 return "⚠ No embeddings found.";
             }
 
-            // ✅ SIMILARITY
+            // ✅ 4. Find top chunks
             List<String> topChunks = embeddings.stream()
                     .sorted((a, b) -> Float.compare(
                             cosineSimilarity(queryVector, stringToVector(b.getEmbedding())),
@@ -65,7 +67,7 @@ System.out.println("📊 Embeddings fetched: " + embeddings.size());
                     .map(DocumentEmbedding::getChunkText)
                     .toList();
 
-            // ✅ CONTEXT
+            // ✅ 5. Build context
             StringBuilder context = new StringBuilder();
             for (String chunk : topChunks) {
                 context.append(chunk).append("\n\n");
@@ -75,24 +77,14 @@ System.out.println("📊 Embeddings fetched: " + embeddings.size());
             String prompt =
                     "You are DocuMind AI.\n\n" +
                     "STRICT RULES:\n" +
-                    "1. Answer ONLY from context\n" +
-                    "2. If not found, say 'Not found in document'\n\n" +
+                    "1. Answer ONLY from the given context.\n" +
+                    "2. Do NOT use outside knowledge.\n" +
+                    "3. If not found, say 'Not found in document'.\n\n" +
                     "CONTEXT:\n" + context +
                     "\nQUESTION:\n" + question +
                     "\nANSWER:";
 
-            String answer = chatModel.generate(prompt);
-
-            // 🔥 STRICT BACKEND CHECK
-            if (answer == null || answer.trim().isEmpty()) {
-                return "Not found in document";
-            }
-
-            if (!context.toString().toLowerCase().contains(answer.toLowerCase())) {
-                return "Not found in document";
-            }
-
-            return answer;
+            return chatModel.generate(prompt);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -124,6 +116,7 @@ System.out.println("📊 Embeddings fetched: " + embeddings.size());
         for (int i = 0; i < parts.length; i++) {
             vector[i] = Float.parseFloat(parts[i]);
         }
+
         return vector;
     }
 }
