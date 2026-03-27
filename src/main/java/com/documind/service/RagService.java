@@ -27,40 +27,55 @@ public class RagService {
         this.chatModel = chatModel;
     }
 
-    public String ask(String question, String username) {
+  public String ask(String question, String username) {
 
+    System.out.println("🔥 RAG STARTED: " + question);
+
+    try {
+
+        // 1️⃣ Get user documents
+        List<Document> docs = documentRepository.findByUserUsername(username);
+
+        if (docs.isEmpty()) {
+            return "⚠ Please upload a document first.";
+        }
+
+        List<Long> docIds = docs.stream()
+                .map(Document::getId)
+                .toList();
+
+        // 2️⃣ Get embeddings
+        List<DocumentEmbedding> embeddings =
+                embeddingRepository.findByDocumentIdIn(docIds);
+
+        if (embeddings.isEmpty()) {
+            return "⚠ Document processed but no embeddings found.";
+        }
+
+        // 3️⃣ Build context (NO VECTOR SEARCH TEMP)
+        StringBuilder context = new StringBuilder();
+
+        for (DocumentEmbedding e : embeddings) {
+            context.append(e.getChunkText()).append("\n\n");
+        }
+
+        // 4️⃣ Prompt
+        String prompt =
+                "Answer only from the context.\n\n" +
+                context +
+                "\nQuestion: " + question;
+
+        // 5️⃣ Call AI safely
         try {
-            List<Document> docs = documentRepository.findByUserUsername("testuser");
-
-            if (docs.isEmpty()) return "⚠ No documents uploaded.";
-
-            List<Long> docIds = docs.stream()
-                    .map(Document::getId)
-                    .toList();
-
-            List<DocumentEmbedding> embeddings =
-                    embeddingRepository.findByDocumentIdIn(docIds);
-
-            if (embeddings.isEmpty()) return "⚠ No embeddings found.";
-
-            List<String> chunks = embeddings.stream()
-                    .map(DocumentEmbedding::getChunkText)
-                    .limit(3)
-                    .collect(Collectors.toList());
-
-            String context = String.join("\n\n", chunks);
-
-            String prompt =
-                    "Answer only from context.\n" +
-                    "If not found say 'Not found in document'.\n\n" +
-                    "Context:\n" + context +
-                    "\nQuestion:\n" + question;
-
             return chatModel.generate(prompt);
-
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Error";
+            return "❌ AI model failed";
         }
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return "❌ Backend crash: " + e.getMessage();
     }
+}
 }
