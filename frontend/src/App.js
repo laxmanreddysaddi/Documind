@@ -23,7 +23,9 @@ export default function App() {
   // 📤 UPLOAD
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-
+  useEffect(() => {
+  console.log("Upload progress:", progress);
+}, [progress]);
   const textareaRef = useRef(null);
   const chatEndRef = useRef(null);
 
