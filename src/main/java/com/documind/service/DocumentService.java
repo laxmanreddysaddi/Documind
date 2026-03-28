@@ -9,6 +9,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -34,7 +35,7 @@ public class DocumentService {
     }
 
     // =========================
-    // ✅ MAIN UPLOAD LOGIC
+    // ✅ SAVE DOCUMENT + EMBEDDINGS
     // =========================
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
@@ -47,9 +48,10 @@ public class DocumentService {
             boolean exists = documentRepository
                     .existsByFileNameAndUserUsername(fileName, username);
 
-          if (exists) {
-    System.out.println("⚠ File already exists. Reprocessing...");
-}
+            if (exists) {
+                System.out.println("⚠ File already exists. Skipping upload.");
+                return;
+            }
 
             // ✅ SAVE DOCUMENT
             Document doc = new Document();
@@ -64,54 +66,47 @@ public class DocumentService {
             System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
 
             // =========================
-            // ✅ READ FILE CONTENT
+            // ✅ EXTRACT CONTENT (FIXED)
             // =========================
             String content = "";
 
-            if (fileName.endsWith(".txt")) {
+            String lowerName = fileName.toLowerCase();
+
+            if (lowerName.endsWith(".txt")) {
+
                 content = new String(file.getBytes(), StandardCharsets.UTF_8);
-            }
 
-            else if (fileName.endsWith(".pdf")) {
-                PDDocument pdf = PDDocument.load(file.getInputStream());
+            } else if (lowerName.endsWith(".pdf")) {
+
+                PDDocument document = PDDocument.load(file.getInputStream());
                 PDFTextStripper stripper = new PDFTextStripper();
-                content = stripper.getText(pdf);
-                pdf.close();
-            }
+                content = stripper.getText(document);
+                document.close();
 
-            else if (fileName.endsWith(".docx")) {
+            } else if (lowerName.endsWith(".docx")) {
+
                 XWPFDocument docx = new XWPFDocument(file.getInputStream());
                 XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
                 content = extractor.getText();
                 docx.close();
             }
 
-            else {
-                throw new RuntimeException("❌ Unsupported file type");
-            }
-
-            // =========================
-            // ✅ DEBUG CONTENT
-            // =========================
-            System.out.println("📄 Content length: " + content.length());
+            System.out.println("📄 Extracted content length: " + content.length());
 
             if (content.trim().isEmpty()) {
-                throw new RuntimeException("❌ Extracted content is empty");
+                throw new RuntimeException("❌ No readable content in file");
             }
 
             // =========================
-            // ✅ CHUNKING (FIXED)
+            // ✅ SPLIT INTO CHUNKS
             // =========================
-            String[] chunks = content.split("\n|\r|\t|\\. ");
-            System.out.println("🧩 Total chunks: " + chunks.length);
+            String[] chunks = content.split("\\. ");
 
             int count = 0;
 
             for (String chunk : chunks) {
 
-                chunk = chunk.trim();
-
-                if (chunk.isEmpty() || chunk.length() < 10) continue;
+                if (chunk.trim().isEmpty()) continue;
 
                 float[] vector = embeddingService.embed(chunk).vector();
                 String vectorString = convertToVectorString(vector);
@@ -134,7 +129,22 @@ public class DocumentService {
     }
 
     // =========================
-    // ✅ DEBUG API
+    // ✅ GET USER DOCUMENTS
+    // =========================
+    public List<Document> getDocumentsByUser(String username) {
+        return documentRepository.findByUserUsername(username);
+    }
+
+    // =========================
+    // ✅ CHECK DUPLICATE FILE
+    // =========================
+    public boolean isFileAlreadyExists(String fileName, String username) {
+        return documentRepository
+                .existsByFileNameAndUserUsername(fileName, username);
+    }
+
+    // =========================
+    // ✅ DEBUG (OPTIONAL)
     // =========================
     public String debugData() {
         long docCount = documentRepository.count();
@@ -143,15 +153,7 @@ public class DocumentService {
     }
 
     // =========================
-    // ✅ DUPLICATE CHECK
-    // =========================
-    public boolean isFileAlreadyExists(String fileName, String username) {
-        return documentRepository
-                .existsByFileNameAndUserUsername(fileName, username);
-    }
-
-    // =========================
-    // ✅ CLEAR DATABASE
+    // ✅ CLEAR DB (OPTIONAL)
     // =========================
     public void clearAll() {
         embeddingRepository.deleteAll();
@@ -159,14 +161,7 @@ public class DocumentService {
     }
 
     // =========================
-    // ✅ HISTORY
-    // =========================
-    public List<Document> getDocumentsByUser(String username) {
-        return documentRepository.findByUserUsername(username);
-    }
-
-    // =========================
-    // ✅ VECTOR FORMAT
+    // ✅ VECTOR CONVERTER
     // =========================
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
