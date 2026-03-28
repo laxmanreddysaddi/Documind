@@ -1,233 +1,304 @@
-import React, { useState, useEffect } from "react";
-import { login, register, askQuestion, uploadFile, getDocuments } from "./api/api";
+import { useState, useEffect, useRef } from "react";
+import axios from "axios";
 
-function App() {
-  const [username, setUsername] = useState("");
+const BASE_URL =
+  process.env.REACT_APP_API_URL ||
+  "https://documind-backend-30m4.onrender.com/api";
+
+// ✅ AXIOS INSTANCE
+const api = axios.create({
+  baseURL: BASE_URL,
+});
+
+// ✅ AUTO LOGOUT ON 401
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response && err.response.status === 401) {
+      alert("Session expired. Please login again.");
+      localStorage.clear();
+      window.location.reload();
+    }
+    return Promise.reject(err);
+  }
+);
+
+export default function App() {
+
+  // 🔐 AUTH
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState(localStorage.getItem("username") || "");
   const [password, setPassword] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
+  const [authLoading, setAuthLoading] = useState(false);
 
+  // 💬 CHAT
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
-
-  const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
 
-  // ✅ Auto login (localStorage)
+  // 📤 UPLOAD
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  // 📂 DOCUMENTS
+  const [documents, setDocuments] = useState([]);
+
+  const textareaRef = useRef(null);
+  const chatEndRef = useRef(null);
+
+  // =========================
+  // 🔄 SESSION EXPIRY
+  // =========================
   useEffect(() => {
-    const user = localStorage.getItem("username");
-    if (user) {
-      setUsername(user);
-      setIsLoggedIn(true);
-      fetchDocs(user);
+    const loginTime = localStorage.getItem("loginTime");
+    if (loginTime) {
+      const now = Date.now();
+      if (now - loginTime > 3600000) {
+        alert("Session expired");
+        localStorage.clear();
+        setToken("");
+      }
     }
   }, []);
 
-  // ✅ Fetch documents
-  const fetchDocs = async (user) => {
+  // =========================
+  // 📂 FETCH DOCUMENTS
+  // =========================
+  const fetchDocuments = async () => {
     try {
-      const docs = await getDocuments(user);
-      setDocuments(docs);
-    } catch (e) {
-      console.log(e);
+      const res = await api.get("/documents/history", {
+        params: { username: localStorage.getItem("username") },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocuments(res.data || []);
+    } catch {
+      console.log("Doc fetch failed");
     }
   };
 
-  // ✅ LOGIN
-  const handleLogin = async () => {
-    setLoading(true);
-    try {
-      await login(username, password);
-      localStorage.setItem("username", username);
-      setIsLoggedIn(true);
-      fetchDocs(username);
-    } catch (e) {
-      alert("Login failed");
-    }
-    setLoading(false);
-  };
+  useEffect(() => {
+    if (token) fetchDocuments();
+  }, [token]);
 
-  // ✅ REGISTER
-  const handleRegister = async () => {
-    setLoading(true);
-    try {
-      await register(username, password);
-      alert("Registered successfully");
-    } catch (e) {
-      alert("Register failed");
-    }
-    setLoading(false);
-  };
-
-  // ✅ LOGOUT (AUTO CLEAR)
-  const handleLogout = () => {
-    localStorage.clear();
-    setIsLoggedIn(false);
-    setMessages([]);
-    setDocuments([]);
-  };
-
-  // ✅ ASK QUESTION
-  const handleAsk = async () => {
-    if (!question) return;
-
-    setMessages([...messages, { role: "user", text: question }]);
-    setLoading(true);
+  // =========================
+  // 🔐 AUTH
+  // =========================
+  const handleAuth = async () => {
+    if (!username || !password) return alert("Enter credentials");
 
     try {
-      const res = await askQuestion(question, username);
+      setAuthLoading(true);
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "bot", text: res }
-      ]);
+      const url = isLogin ? "/auth/login" : "/auth/register";
+      const res = await api.post(url, { username, password });
+
+      if (isLogin) {
+        const t = res.data.token || res.data;
+
+        setToken(t);
+        localStorage.setItem("token", t);
+        localStorage.setItem("username", username);
+        localStorage.setItem("loginTime", Date.now());
+      } else {
+        alert("Registered! Login now");
+        setIsLogin(true);
+      }
+
     } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "bot", text: "❌ Error getting response" }
-      ]);
+      alert("❌ " + (e.response?.data || e.message));
+    } finally {
+      setAuthLoading(false);
     }
+  };
+
+  // =========================
+  // 💬 SEND MESSAGE
+  // =========================
+  const sendMessage = async () => {
+    if (!question.trim()) return;
+
+    const userMsg = { role: "user", text: question };
+    setMessages((prev) => [...prev, userMsg]);
 
     setQuestion("");
+    setLoading(true);
+
+    try {
+      const res = await api.get("/chat", {
+        params: {
+          question,
+          username: localStorage.getItem("username")
+        },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: res.data },
+      ]);
+
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "❌ Error" },
+      ]);
+    }
+
     setLoading(false);
   };
 
-  // ✅ ENTER KEY SUPPORT
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      handleAsk();
-    }
-  };
-
-  // ✅ FILE UPLOAD (FAST + USERNAME FIX)
-  const handleUpload = async (e) => {
+  // =========================
+  // 📤 UPLOAD
+  // =========================
+  const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    setUploading(true);
+    const currentUser = localStorage.getItem("username");
+
+    console.log("Uploading as:", currentUser);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", currentUser);
 
     try {
-      await uploadFile(file, username); // 🔥 IMPORTANT
-      alert("Uploaded successfully");
-      fetchDocs(username);
-    } catch (err) {
-      alert("Upload failed");
-    }
+      setUploading(true);
+      setProgress(0);
 
-    setUploading(false);
+      await api.post("/documents/upload", formData, {
+        headers: { Authorization: `Bearer ${token}` },
+        onUploadProgress: (event) => {
+          setProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      });
+
+      alert("✅ Uploaded");
+      fetchDocuments();
+
+    } catch (e) {
+      alert("❌ Upload failed");
+    } finally {
+      setUploading(false);
+    }
   };
 
   // =========================
-  // UI
+  // 🔐 LOGIN UI
   // =========================
-
-  if (!isLoggedIn) {
+  if (!token) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-white p-8 rounded-xl shadow-md w-80">
-          <h2 className="text-xl font-bold mb-4">DocuMind AI</h2>
+      <div className="flex h-screen">
 
-          <input
-            placeholder="Username"
-            className="w-full mb-2 p-2 border rounded"
-            onChange={(e) => setUsername(e.target.value)}
-          />
+        <div className="w-1/2 bg-blue-600 text-white flex justify-center items-center">
+          <h1 className="text-4xl font-bold">DocuMind AI</h1>
+        </div>
 
-          <input
-            placeholder="Password"
-            type="password"
-            className="w-full mb-4 p-2 border rounded"
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <div className="w-1/2 flex justify-center items-center bg-gray-100">
+          <div className="bg-white p-8 rounded-xl w-96">
 
-          <button
-            onClick={handleLogin}
-            className="w-full bg-blue-600 text-white p-2 rounded mb-2"
-          >
-            {loading ? "Loading..." : "Login"}
-          </button>
+            <h2 className="text-xl mb-4">
+              {isLogin ? "Login" : "Register"}
+            </h2>
 
-          <button
-            onClick={handleRegister}
-            className="w-full bg-green-600 text-white p-2 rounded"
-          >
-            Register
-          </button>
+            <input
+              className="w-full border p-2 mb-2"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+
+            <input
+              type="password"
+              className="w-full border p-2 mb-2"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button
+              onClick={handleAuth}
+              className="w-full bg-blue-600 text-white p-2"
+            >
+              {authLoading ? "Wait..." : isLogin ? "Login" : "Register"}
+            </button>
+
+            <p
+              className="mt-2 text-blue-600 cursor-pointer"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              Switch
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
+  // =========================
+  // 💬 CHAT UI
+  // =========================
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-gray-900 text-white">
 
-      {/* ================= LEFT PANEL ================= */}
-      <div className="w-1/4 bg-gray-900 text-white p-4 overflow-y-auto">
-        <h2 className="text-lg font-bold mb-4">📂 Documents</h2>
+      {/* SIDEBAR */}
+      <div className="w-64 bg-black p-4 flex flex-col">
+        <button
+          onClick={() => setMessages([])}
+          className="bg-blue-600 p-2 mb-3"
+        >
+          New Chat
+        </button>
 
-        {documents.length === 0 && <p>No documents</p>}
+        <input type="file" onChange={uploadFile} />
 
-        {documents.map((doc, i) => (
-          <div key={i} className="mb-2 p-2 bg-gray-700 rounded">
-            {doc.fileName}
-          </div>
-        ))}
+        {uploading && <p>{progress}%</p>}
 
-        <input type="file" onChange={handleUpload} className="mt-4" />
-
-        {uploading && <p className="mt-2">Uploading...</p>}
+        <div className="mt-4">
+          {documents.map((d, i) => (
+            <div key={i}>📄 {d.fileName}</div>
+          ))}
+        </div>
 
         <button
-          onClick={handleLogout}
-          className="mt-6 bg-red-500 p-2 w-full rounded"
+          className="mt-auto bg-red-600 p-2"
+          onClick={() => {
+            localStorage.clear();
+            setToken("");
+          }}
         >
           Logout
         </button>
       </div>
 
-      {/* ================= CHAT ================= */}
+      {/* CHAT */}
       <div className="flex-1 flex flex-col">
 
-        {/* Messages */}
-        <div className="flex-1 p-6 overflow-y-auto bg-gray-100">
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`mb-4 flex ${
-                msg.role === "user"
-                  ? "justify-end"
-                  : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-xl px-4 py-3 rounded-2xl ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-black shadow"
-                }`}
-              >
-                {msg.text}
-              </div>
+        <div className="flex-1 p-4 overflow-y-auto">
+          {messages.map((m, i) => (
+            <div key={i} className={m.role === "user" ? "text-right" : ""}>
+              {m.text}
             </div>
           ))}
 
-          {loading && <p>Typing...</p>}
+          {loading && <p>Thinking...</p>}
         </div>
 
-        {/* Input */}
-        <div className="p-4 flex border-t">
-          <input
+        <div className="p-3 flex">
+          <textarea
+            ref={textareaRef}
+            className="flex-1 p-2 text-black"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 border p-2 rounded mr-2"
-            placeholder="Ask something..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
           />
-
-          <button
-            onClick={handleAsk}
-            className="bg-blue-600 text-white px-4 rounded"
-          >
+          <button onClick={sendMessage} className="bg-blue-600 px-4">
             Send
           </button>
         </div>
@@ -235,5 +306,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
