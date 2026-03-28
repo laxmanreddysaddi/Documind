@@ -78,6 +78,11 @@ public class DocumentController {
                     .body("❌ Upload failed: " + e.getMessage());
         }
     }
+    @DeleteMapping("/clear")
+public String clearAll() {
+    documentService.clearAll();
+    return "All data cleared";
+}
    @GetMapping("/debug")
 public ResponseEntity<?> debug() {
     return ResponseEntity.ok(documentService.debugData());

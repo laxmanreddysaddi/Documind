@@ -112,6 +112,10 @@ public String debugData() {
         sb.append("]");
         return sb.toString();
     }
+    public void clearAll() {
+    embeddingRepository.deleteAll();
+    documentRepository.deleteAll();
+}
 
     // ✅ REQUIRED FOR HISTORY
     public java.util.List<Document> getDocumentsByUser(String username) {
