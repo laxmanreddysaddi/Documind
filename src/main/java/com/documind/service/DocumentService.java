@@ -32,14 +32,14 @@ public class DocumentService {
         this.embeddingService = embeddingService;
     }
 
-   public void saveDocumentMetadata(MultipartFile file, String username) {
+  public void saveDocumentMetadata(MultipartFile file, String username) {
 
     try {
         System.out.println("🔥 Processing document...");
 
         String fileName = file.getOriginalFilename();
 
-        // ✅ CHECK IF FILE EXISTS
+        // ✅ CHECK DUPLICATE
         boolean exists = documentRepository
                 .existsByFileNameAndUserUsername(fileName, username);
 
@@ -60,9 +60,36 @@ public class DocumentService {
 
         System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
 
-        // ✅ READ CONTENT
-        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        // ======================================
+        // ✅ FIX: READ FILE BASED ON TYPE
+        // ======================================
+        String content = "";
 
+        if (fileName.endsWith(".txt")) {
+            content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        }
+
+        else if (fileName.endsWith(".pdf")) {
+            PDDocument pdf = PDDocument.load(file.getInputStream());
+            PDFTextStripper stripper = new PDFTextStripper();
+            content = stripper.getText(pdf);
+            pdf.close();
+        }
+
+        else if (fileName.endsWith(".docx")) {
+            XWPFDocument docx = new XWPFDocument(file.getInputStream());
+            XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
+            content = extractor.getText();
+            docx.close();
+        }
+
+        else {
+            throw new RuntimeException("❌ Unsupported file type");
+        }
+
+        // ======================================
+        // ✅ SPLIT + EMBEDDINGS
+        // ======================================
         String[] chunks = content.split("\\. ");
 
         int count = 0;
@@ -90,7 +117,6 @@ public class DocumentService {
         throw new RuntimeException("❌ File processing failed");
     }
 }
-
 public String debugData() {
 
     long docCount = documentRepository.count();
