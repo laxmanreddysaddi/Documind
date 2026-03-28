@@ -34,6 +34,9 @@ public class DocumentService {
         this.embeddingService = embeddingService;
     }
 
+    // =========================
+    // ✅ MAIN METHOD (FIXED)
+    // =========================
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         try {
@@ -47,54 +50,57 @@ public class DocumentService {
                 return;
             }
 
-            // ✅ SAVE DOCUMENT
+            // ✅ SAVE DOCUMENT FIRST (CRITICAL)
             Document doc = new Document();
             doc.setFileName(fileName);
             doc.setFileSize(file.getSize());
             doc.setUserUsername(username);
             doc.setUploadedAt(LocalDateTime.now());
 
-            Document savedDoc = documentRepository.saveAndFlush(doc);
+            documentRepository.saveAndFlush(doc); // 🔥 IMPORTANT
 
-            System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
+            Long docId = doc.getId(); // ✅ GUARANTEED ID
 
-            if (savedDoc.getId() == null) {
+            if (docId == null) {
                 throw new RuntimeException("❌ Document ID is NULL");
             }
 
+            System.out.println("📄 Doc ID: " + docId);
+
             // =========================
-            // ✅ EXTRACT TEXT
+            // ✅ EXTRACT TEXT (TXT / PDF / DOCX)
             // =========================
             String content = "";
 
             String lower = fileName.toLowerCase();
 
             if (lower.endsWith(".txt")) {
+
                 content = new String(file.getBytes(), StandardCharsets.UTF_8);
 
             } else if (lower.endsWith(".pdf")) {
 
-                PDDocument pdf = PDDocument.load(file.getInputStream());
-                PDFTextStripper stripper = new PDFTextStripper();
-                content = stripper.getText(pdf);
-                pdf.close();
+                try (PDDocument pdf = PDDocument.load(file.getInputStream())) {
+                    PDFTextStripper stripper = new PDFTextStripper();
+                    content = stripper.getText(pdf);
+                }
 
             } else if (lower.endsWith(".docx")) {
 
-                XWPFDocument docx = new XWPFDocument(file.getInputStream());
-                XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
-                content = extractor.getText();
-                docx.close();
+                try (XWPFDocument docx = new XWPFDocument(file.getInputStream())) {
+                    XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
+                    content = extractor.getText();
+                }
             }
 
             System.out.println("📄 Content length: " + content.length());
 
-            if (content.trim().isEmpty()) {
+            if (content == null || content.trim().isEmpty()) {
                 throw new RuntimeException("❌ Empty content extracted");
             }
 
             // =========================
-            // ✅ SPLIT INTO CHUNKS (MISSING IN YOUR CODE ❌)
+            // ✅ CHUNKING (FIXED)
             // =========================
             String[] chunks = content.split("\\. ");
 
@@ -102,60 +108,71 @@ public class DocumentService {
 
             for (String chunk : chunks) {
 
-                if (chunk.trim().isEmpty()) continue;
+                if (chunk == null || chunk.trim().isEmpty()) continue;
 
                 float[] vector;
 
                 try {
                     vector = embeddingService.embed(chunk).vector();
                 } catch (Exception e) {
-                    System.out.println("❌ Embedding failed");
+                    System.out.println("❌ Embedding failed for chunk");
                     continue;
                 }
 
-                if (vector == null || vector.length == 0) {
-                    continue;
-                }
+                if (vector == null || vector.length == 0) continue;
 
                 DocumentEmbedding de = new DocumentEmbedding();
-                de.setChunkText(chunk);
+                de.setChunkText(chunk.trim());
                 de.setEmbedding(convertToVectorString(vector));
-                de.setDocumentId(savedDoc.getId());
+                de.setDocumentId(docId); // 🔥 FIXED LINK
 
                 embeddingRepository.save(de);
                 count++;
             }
 
-            embeddingRepository.flush();
+            embeddingRepository.flush(); // 🔥 IMPORTANT
 
             System.out.println("✅ Saved embeddings: " + count);
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("❌ File processing failed");
+            throw new RuntimeException("❌ File processing failed: " + e.getMessage());
         }
     }
 
+    // =========================
+    // ✅ HISTORY
+    // =========================
     public List<Document> getDocumentsByUser(String username) {
         return documentRepository.findByUserUsername(username);
     }
 
+    // =========================
+    // ✅ DUPLICATE CHECK
+    // =========================
     public boolean isFileAlreadyExists(String fileName, String username) {
-        return documentRepository
-                .existsByFileNameAndUserUsername(fileName, username);
+        return documentRepository.existsByFileNameAndUserUsername(fileName, username);
     }
 
+    // =========================
+    // ✅ DEBUG
+    // =========================
     public String debugData() {
-        long docCount = documentRepository.count();
-        long embedCount = embeddingRepository.count();
-        return "Documents: " + docCount + " | Embeddings: " + embedCount;
+        return "Documents: " + documentRepository.count()
+                + " | Embeddings: " + embeddingRepository.count();
     }
 
+    // =========================
+    // ✅ CLEAR DB (USE ONCE)
+    // =========================
     public void clearAll() {
         embeddingRepository.deleteAll();
         documentRepository.deleteAll();
     }
 
+    // =========================
+    // ✅ VECTOR FORMAT
+    // =========================
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {

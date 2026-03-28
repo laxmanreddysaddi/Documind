@@ -39,16 +39,14 @@ export default function App() {
 
   // 📤 UPLOAD
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
 
   // 📂 DOCUMENTS
   const [documents, setDocuments] = useState([]);
 
   const textareaRef = useRef(null);
-  const chatEndRef = useRef(null);
 
   // =========================
-  // 🔄 SESSION EXPIRY
+  // 🔄 SESSION AUTO CLEAR (1hr)
   // =========================
   useEffect(() => {
     const loginTime = localStorage.getItem("loginTime");
@@ -63,17 +61,20 @@ export default function App() {
   }, []);
 
   // =========================
-  // 📂 FETCH DOCUMENTS
+  // 📂 FETCH DOCUMENTS (FIXED)
   // =========================
   const fetchDocuments = async () => {
     try {
-      const res = await api.get("/documents/history", {
-        params: { username: localStorage.getItem("username") },
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const user = localStorage.getItem("username");
+
+      const res = await api.get(
+        `/documents/history?username=${user}`
+      );
+
       setDocuments(res.data || []);
-    } catch {
-      console.log("Doc fetch failed");
+
+    } catch (err) {
+      console.log("❌ Document fetch error", err);
     }
   };
 
@@ -85,12 +86,16 @@ export default function App() {
   // 🔐 AUTH
   // =========================
   const handleAuth = async () => {
-    if (!username || !password) return alert("Enter credentials");
+
+    if (!username || !password) {
+      return alert("Enter credentials");
+    }
 
     try {
       setAuthLoading(true);
 
       const url = isLogin ? "/auth/login" : "/auth/register";
+
       const res = await api.post(url, { username, password });
 
       if (isLogin) {
@@ -100,6 +105,7 @@ export default function App() {
         localStorage.setItem("token", t);
         localStorage.setItem("username", username);
         localStorage.setItem("loginTime", Date.now());
+
       } else {
         alert("Registered! Login now");
         setIsLogin(true);
@@ -113,24 +119,25 @@ export default function App() {
   };
 
   // =========================
-  // 💬 SEND MESSAGE
+  // 💬 SEND MESSAGE (FIXED)
   // =========================
   const sendMessage = async () => {
+
     if (!question.trim()) return;
 
     const userMsg = { role: "user", text: question };
     setMessages((prev) => [...prev, userMsg]);
 
+    const currentQ = question;
     setQuestion("");
     setLoading(true);
 
     try {
       const res = await api.get("/chat", {
         params: {
-          question,
-          username: localStorage.getItem("username")
+          question: currentQ,
+          username: localStorage.getItem("username"),
         },
-        headers: { Authorization: `Bearer ${token}` }
       });
 
       setMessages((prev) => [
@@ -149,15 +156,14 @@ export default function App() {
   };
 
   // =========================
-  // 📤 UPLOAD
+  // 📤 UPLOAD (FIXED 403 + 500)
   // =========================
   const uploadFile = async (e) => {
+
     const file = e.target.files[0];
     if (!file) return;
 
     const currentUser = localStorage.getItem("username");
-
-    console.log("Uploading as:", currentUser);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -165,19 +171,14 @@ export default function App() {
 
     try {
       setUploading(true);
-      setProgress(0);
 
-      await api.post("/documents/upload", formData, {
-        headers: { Authorization: `Bearer ${token}` },
-        onUploadProgress: (event) => {
-          setProgress(Math.round((event.loaded * 100) / event.total));
-        }
-      });
+      await api.post("/documents/upload", formData);
 
       alert("✅ Uploaded");
       fetchDocuments();
 
     } catch (e) {
+      console.log(e);
       alert("❌ Upload failed");
     } finally {
       setUploading(false);
@@ -230,6 +231,7 @@ export default function App() {
             >
               Switch
             </p>
+
           </div>
         </div>
       </div>
@@ -244,6 +246,7 @@ export default function App() {
 
       {/* SIDEBAR */}
       <div className="w-64 bg-black p-4 flex flex-col">
+
         <button
           onClick={() => setMessages([])}
           className="bg-blue-600 p-2 mb-3"
@@ -253,9 +256,11 @@ export default function App() {
 
         <input type="file" onChange={uploadFile} />
 
-        {uploading && <p>{progress}%</p>}
+        {uploading && <p>Uploading...</p>}
 
+        {/* 📂 DOCUMENT HISTORY */}
         <div className="mt-4">
+          <h3 className="mb-2 font-bold">Documents</h3>
           {documents.map((d, i) => (
             <div key={i}>📄 {d.fileName}</div>
           ))}
@@ -270,6 +275,7 @@ export default function App() {
         >
           Logout
         </button>
+
       </div>
 
       {/* CHAT */}
@@ -281,7 +287,6 @@ export default function App() {
               {m.text}
             </div>
           ))}
-
           {loading && <p>Thinking...</p>}
         </div>
 
@@ -302,6 +307,7 @@ export default function App() {
             Send
           </button>
         </div>
+
       </div>
     </div>
   );
