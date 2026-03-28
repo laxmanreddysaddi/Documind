@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 
 const BASE_URL =
@@ -9,7 +9,6 @@ const api = axios.create({
   baseURL: BASE_URL,
 });
 
-// ✅ TOKEN
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -18,35 +17,29 @@ api.interceptors.request.use((config) => {
 
 export default function App() {
 
-  // 🔐 AUTH
+  // ================= AUTH =================
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState(localStorage.getItem("username") || "");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token") || "");
 
-  // 💬 CHAT
+  // ================= DATA =================
+  const [documents, setDocuments] = useState([]);
+  const [selectedDocId, setSelectedDocId] = useState("");
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // 📂 DOCS
-  const [documents, setDocuments] = useState([]);
-  const [selectedDocId, setSelectedDocId] = useState(null);
   const [uploading, setUploading] = useState(false);
 
-  const textareaRef = useRef(null);
-
-  // =========================
-  // 📂 FETCH DOCUMENTS
-  // =========================
+  // ================= FETCH DOCS =================
   const fetchDocuments = async () => {
     try {
       const res = await api.get("/documents/history", {
         params: { username },
       });
       setDocuments(res.data || []);
-    } catch (err) {
-      console.log("❌ Document error", err);
+    } catch (e) {
+      console.log(e);
     }
   };
 
@@ -54,13 +47,10 @@ export default function App() {
     if (token) fetchDocuments();
   }, [token]);
 
-  // =========================
-  // 🔐 AUTH
-  // =========================
+  // ================= AUTH =================
   const handleAuth = async () => {
-    const url = isLogin ? "/auth/login" : "/auth/register";
-
     try {
+      const url = isLogin ? "/auth/login" : "/auth/register";
       const res = await api.post(url, { username, password });
 
       if (isLogin) {
@@ -72,27 +62,25 @@ export default function App() {
         alert("Registered! Login now");
         setIsLogin(true);
       }
-    } catch (e) {
-      alert("❌ " + e.message);
+    } catch {
+      alert("Auth failed");
     }
   };
 
-  // =========================
-  // 💬 SEND MESSAGE (FIXED)
-  // =========================
+  // ================= CHAT =================
   const sendMessage = async () => {
 
     if (!question.trim()) return;
 
     if (!selectedDocId) {
-      alert("⚠ Select document first");
+      alert("Select document first");
       return;
     }
 
     const q = question;
     setQuestion("");
 
-    setMessages((prev) => [...prev, { role: "user", text: q }]);
+    setMessages(prev => [...prev, { role: "user", text: q }]);
     setLoading(true);
 
     try {
@@ -104,24 +92,22 @@ export default function App() {
         },
       });
 
-      setMessages((prev) => [
+      setMessages(prev => [
         ...prev,
         { role: "ai", text: res.data },
       ]);
 
-    } catch (err) {
-      setMessages((prev) => [
+    } catch {
+      setMessages(prev => [
         ...prev,
-        { role: "ai", text: "❌ Error" },
+        { role: "ai", text: "Error" },
       ]);
     }
 
     setLoading(false);
   };
 
-  // =========================
-  // 📤 UPLOAD
-  // =========================
+  // ================= UPLOAD =================
   const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -132,88 +118,104 @@ export default function App() {
 
     try {
       setUploading(true);
-
       await api.post("/documents/upload", formData);
-
-      alert("✅ Uploaded");
       fetchDocuments();
-
     } catch {
-      alert("❌ Upload failed");
+      alert("Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  // =========================
-  // ❌ DELETE DOC
-  // =========================
+  // ================= DELETE =================
   const deleteDoc = async (id) => {
     await api.delete(`/documents/delete/${id}`);
     fetchDocuments();
   };
 
-  // =========================
-  // 🧹 CLEAR CHAT
-  // =========================
-  const clearChat = () => {
-    setMessages([]);
-  };
+  // ================= CLEAR CHAT =================
+  const clearChat = () => setMessages([]);
 
-  // =========================
-  // 🚪 LOGOUT
-  // =========================
+  // ================= LOGOUT =================
   const logout = () => {
     localStorage.clear();
     setToken("");
   };
 
-  // =========================
-  // 🔐 LOGIN UI
-  // =========================
+  // ================= LOGIN UI =================
   if (!token) {
     return (
       <div className="flex h-screen">
-        <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-3xl">
+
+        {/* LEFT */}
+        <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-4xl font-bold">
           DocuMind AI
         </div>
 
-        <div className="w-1/2 flex items-center justify-center">
-          <div>
-            <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
-            <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
+        {/* RIGHT */}
+        <div className="w-1/2 flex items-center justify-center bg-gray-100">
+          <div className="bg-white p-8 rounded-xl shadow-lg w-80">
 
-            <button onClick={handleAuth}>
+            <h2 className="text-2xl font-bold mb-6 text-center">
+              {isLogin ? "Login" : "Register"}
+            </h2>
+
+            <input
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+
+            <input
+              type="password"
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button
+              onClick={handleAuth}
+              className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+            >
               {isLogin ? "Login" : "Register"}
             </button>
 
-            <p onClick={() => setIsLogin(!isLogin)}>Switch</p>
+            <p
+              className="mt-4 text-center text-blue-600 cursor-pointer"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              Switch
+            </p>
+
           </div>
         </div>
       </div>
     );
   }
 
-  // =========================
-  // 💬 MAIN UI
-  // =========================
+  // ================= MAIN UI =================
   return (
     <div className="flex h-screen bg-gray-900 text-white">
 
-      {/* LEFT */}
+      {/* SIDEBAR */}
       <div className="w-64 bg-black p-4 flex flex-col">
 
-        <button onClick={clearChat} className="bg-blue-600 p-2 mb-3">
+        <button
+          onClick={clearChat}
+          className="bg-blue-600 p-2 rounded mb-3"
+        >
           New Chat
         </button>
 
         <input type="file" onChange={uploadFile} />
-        {uploading && <p>Uploading...</p>}
+        {uploading && <p className="text-sm mt-2">Uploading...</p>}
 
         {/* SELECT DOC */}
         <select
+          className="text-black mt-3 p-1 rounded"
           onChange={(e) => setSelectedDocId(e.target.value)}
-          className="text-black mt-2"
         >
           <option>Select Document</option>
           {documents.map((d) => (
@@ -223,44 +225,64 @@ export default function App() {
           ))}
         </select>
 
-        <div className="mt-4">
+        {/* DOC LIST */}
+        <div className="mt-4 space-y-2">
           {documents.map((d) => (
-            <div key={d.id} className="flex justify-between">
+            <div key={d.id} className="flex justify-between text-sm">
               <span>{d.fileName}</span>
               <button onClick={() => deleteDoc(d.id)}>❌</button>
             </div>
           ))}
         </div>
 
-        <button onClick={logout} className="mt-auto bg-red-600 p-2">
+        <button
+          onClick={logout}
+          className="mt-auto bg-red-600 p-2 rounded"
+        >
           Logout
         </button>
 
       </div>
 
-      {/* RIGHT */}
+      {/* CHAT */}
       <div className="flex-1 flex flex-col">
 
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 p-4 overflow-y-auto space-y-3">
+
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "text-right" : ""}>
+            <div
+              key={i}
+              className={`p-2 rounded max-w-xl ${
+                m.role === "user"
+                  ? "bg-blue-600 ml-auto"
+                  : "bg-gray-700"
+              }`}
+            >
               {m.text}
             </div>
           ))}
+
           {loading && <p>Thinking...</p>}
         </div>
 
-        <div className="p-3 flex">
+        {/* INPUT */}
+        <div className="p-3 flex gap-2">
+
           <textarea
-            className="flex-1 text-black"
+            className="flex-1 p-2 text-black rounded"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Ask something..."
           />
-          <button onClick={sendMessage} className="bg-blue-600 px-4">
+
+          <button
+            onClick={sendMessage}
+            className="bg-blue-600 px-6 rounded"
+          >
             Send
           </button>
-        </div>
 
+        </div>
       </div>
     </div>
   );
