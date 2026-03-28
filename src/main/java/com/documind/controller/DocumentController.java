@@ -78,7 +78,10 @@ public class DocumentController {
                     .body("❌ Upload failed: " + e.getMessage());
         }
     }
-
+   @GetMapping("/debug")
+public ResponseEntity<?> debug() {
+    return ResponseEntity.ok(documentService.debugData());
+}
     // =========================
     // ✅ Get Document History
     // =========================

@@ -90,6 +90,14 @@ public class DocumentService {
         throw new RuntimeException("❌ File processing failed");
     }
 }
+
+public String debugData() {
+
+    long docCount = documentRepository.count();
+    long embedCount = embeddingRepository.count();
+
+    return "Documents: " + docCount + " | Embeddings: " + embedCount;
+}
   public boolean isFileAlreadyExists(String fileName, String username) {
     return documentRepository
             .existsByFileNameAndUserUsername(fileName, username);
