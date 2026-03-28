@@ -10,7 +10,7 @@ const api = axios.create({
   baseURL: BASE_URL,
 });
 
-// ✅ AUTO LOGOUT ON 401
+// ✅ AUTO LOGOUT
 api.interceptors.response.use(
   (res) => res,
   (err) => {
@@ -45,13 +45,13 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
 
   const textareaRef = useRef(null);
-  const chatEndRef = useRef(null);
 
   // =========================
   // 🔄 SESSION EXPIRY
   // =========================
   useEffect(() => {
     const loginTime = localStorage.getItem("loginTime");
+
     if (loginTime) {
       const now = Date.now();
       if (now - loginTime > 3600000) {
@@ -71,9 +71,11 @@ export default function App() {
         params: { username: localStorage.getItem("username") },
         headers: { Authorization: `Bearer ${token}` }
       });
+
       setDocuments(res.data || []);
-    } catch {
-      console.log("Doc fetch failed");
+
+    } catch (e) {
+      console.log("Doc fetch failed", e);
     }
   };
 
@@ -85,7 +87,10 @@ export default function App() {
   // 🔐 AUTH
   // =========================
   const handleAuth = async () => {
-    if (!username || !password) return alert("Enter credentials");
+    if (!username || !password) {
+      alert("Enter credentials");
+      return;
+    }
 
     try {
       setAuthLoading(true);
@@ -118,8 +123,7 @@ export default function App() {
   const sendMessage = async () => {
     if (!question.trim()) return;
 
-    const userMsg = { role: "user", text: question };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, { role: "user", text: question }]);
 
     setQuestion("");
     setLoading(true);
@@ -138,10 +142,11 @@ export default function App() {
         { role: "ai", text: res.data },
       ]);
 
-    } catch {
+    } catch (e) {
+      console.log(e);
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "❌ Error" },
+        { role: "ai", text: "❌ Error getting response" },
       ]);
     }
 
@@ -170,14 +175,16 @@ export default function App() {
       await api.post("/documents/upload", formData, {
         headers: { Authorization: `Bearer ${token}` },
         onUploadProgress: (event) => {
-          setProgress(Math.round((event.loaded * 100) / event.total));
+          const percent = Math.round((event.loaded * 100) / event.total);
+          setProgress(percent);
         }
       });
 
-      alert("✅ Uploaded");
+      alert("✅ Uploaded successfully");
       fetchDocuments();
 
     } catch (e) {
+      console.log(e);
       alert("❌ Upload failed");
     } finally {
       setUploading(false);
@@ -221,7 +228,7 @@ export default function App() {
               onClick={handleAuth}
               className="w-full bg-blue-600 text-white p-2"
             >
-              {authLoading ? "Wait..." : isLogin ? "Login" : "Register"}
+              {authLoading ? "Please wait..." : isLogin ? "Login" : "Register"}
             </button>
 
             <p
@@ -230,6 +237,7 @@ export default function App() {
             >
               Switch
             </p>
+
           </div>
         </div>
       </div>
@@ -244,6 +252,7 @@ export default function App() {
 
       {/* SIDEBAR */}
       <div className="w-64 bg-black p-4 flex flex-col">
+
         <button
           onClick={() => setMessages([])}
           className="bg-blue-600 p-2 mb-3"
@@ -256,8 +265,8 @@ export default function App() {
         {uploading && <p>{progress}%</p>}
 
         <div className="mt-4">
-          {documents.map((d, i) => (
-            <div key={i}>📄 {d.fileName}</div>
+          {documents.map((doc, i) => (
+            <div key={i}>📄 {doc.fileName}</div>
           ))}
         </div>
 
@@ -276,13 +285,13 @@ export default function App() {
       <div className="flex-1 flex flex-col">
 
         <div className="flex-1 p-4 overflow-y-auto">
-          {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "text-right" : ""}>
-              {m.text}
+          {messages.map((msg, i) => (
+            <div key={i} className={msg.role === "user" ? "text-right" : ""}>
+              {msg.text}
             </div>
           ))}
 
-          {loading && <p>Thinking...</p>}
+          {loading && <p>🤖 Thinking...</p>}
         </div>
 
         <div className="p-3 flex">
@@ -298,7 +307,11 @@ export default function App() {
               }
             }}
           />
-          <button onClick={sendMessage} className="bg-blue-600 px-4">
+
+          <button
+            onClick={sendMessage}
+            className="bg-blue-600 px-4 ml-2"
+          >
             Send
           </button>
         </div>
