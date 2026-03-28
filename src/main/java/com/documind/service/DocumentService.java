@@ -34,136 +34,128 @@ public class DocumentService {
         this.embeddingService = embeddingService;
     }
 
-    // =========================
-    // ✅ SAVE DOCUMENT + EMBEDDINGS
-    // =========================
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
-    try {
-        System.out.println("🔥 Processing document...");
+        try {
+            System.out.println("🔥 Processing document...");
 
-        String fileName = file.getOriginalFilename();
+            String fileName = file.getOriginalFilename();
 
-        // ✅ DUPLICATE CHECK
-        if (documentRepository.existsByFileNameAndUserUsername(fileName, username)) {
-            System.out.println("⚠ File already exists");
-            return;
+            // ✅ DUPLICATE CHECK
+            if (documentRepository.existsByFileNameAndUserUsername(fileName, username)) {
+                System.out.println("⚠ File already exists");
+                return;
+            }
+
+            // ✅ SAVE DOCUMENT
+            Document doc = new Document();
+            doc.setFileName(fileName);
+            doc.setFileSize(file.getSize());
+            doc.setUserUsername(username);
+            doc.setUploadedAt(LocalDateTime.now());
+
+            Document savedDoc = documentRepository.saveAndFlush(doc);
+
+            System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
+
+            if (savedDoc.getId() == null) {
+                throw new RuntimeException("❌ Document ID is NULL");
+            }
+
+            // =========================
+            // ✅ EXTRACT TEXT
+            // =========================
+            String content = "";
+
+            String lower = fileName.toLowerCase();
+
+            if (lower.endsWith(".txt")) {
+                content = new String(file.getBytes(), StandardCharsets.UTF_8);
+
+            } else if (lower.endsWith(".pdf")) {
+
+                PDDocument pdf = PDDocument.load(file.getInputStream());
+                PDFTextStripper stripper = new PDFTextStripper();
+                content = stripper.getText(pdf);
+                pdf.close();
+
+            } else if (lower.endsWith(".docx")) {
+
+                XWPFDocument docx = new XWPFDocument(file.getInputStream());
+                XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
+                content = extractor.getText();
+                docx.close();
+            }
+
+            System.out.println("📄 Content length: " + content.length());
+
+            if (content.trim().isEmpty()) {
+                throw new RuntimeException("❌ Empty content extracted");
+            }
+
+            // =========================
+            // ✅ SPLIT INTO CHUNKS (MISSING IN YOUR CODE ❌)
+            // =========================
+            String[] chunks = content.split("\\. ");
+
+            int count = 0;
+
+            for (String chunk : chunks) {
+
+                if (chunk.trim().isEmpty()) continue;
+
+                float[] vector;
+
+                try {
+                    vector = embeddingService.embed(chunk).vector();
+                } catch (Exception e) {
+                    System.out.println("❌ Embedding failed");
+                    continue;
+                }
+
+                if (vector == null || vector.length == 0) {
+                    continue;
+                }
+
+                DocumentEmbedding de = new DocumentEmbedding();
+                de.setChunkText(chunk);
+                de.setEmbedding(convertToVectorString(vector));
+                de.setDocumentId(savedDoc.getId());
+
+                embeddingRepository.save(de);
+                count++;
+            }
+
+            embeddingRepository.flush();
+
+            System.out.println("✅ Saved embeddings: " + count);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("❌ File processing failed");
         }
-
-        // ✅ SAVE DOCUMENT (IMPORTANT FIX)
-        Document doc = new Document();
-        doc.setFileName(fileName);
-        doc.setFileSize(file.getSize());
-        doc.setUserUsername(username);
-        doc.setUploadedAt(LocalDateTime.now());
-
-        Document savedDoc = documentRepository.saveAndFlush(doc);
-
-        System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
-
-        if (savedDoc.getId() == null) {
-            throw new RuntimeException("❌ Document ID is NULL");
-        }
-
-        // =========================
-        // ✅ EXTRACT TEXT (WORKING)
-        // =========================
-        String content = "";
-
-        String lower = fileName.toLowerCase();
-
-        if (lower.endsWith(".txt")) {
-            content = new String(file.getBytes(), StandardCharsets.UTF_8);
-
-        } else if (lower.endsWith(".pdf")) {
-
-            PDDocument pdf = PDDocument.load(file.getInputStream());
-            PDFTextStripper stripper = new PDFTextStripper();
-            content = stripper.getText(pdf);
-            pdf.close();
-
-        } else if (lower.endsWith(".docx")) {
-
-            XWPFDocument docx = new XWPFDocument(file.getInputStream());
-            XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
-            content = extractor.getText();
-            docx.close();
-        }
-
-        System.out.println("📄 Content length: " + content.length());
-
-        if (content.trim().isEmpty()) {
-            throw new RuntimeException("❌ Empty content extracted");
-        }
-
-        // =========================
-        // ✅ CHUNK + SAVE EMBEDDINGS
-        // =========================
-        String[] chunks = content.split("\\. ");
-
-        int count = 0;
-
-        for (String chunk : chunks) {
-
-            if (chunk.trim().isEmpty()) continue;
-
-            float[] vector = embeddingService.embed(chunk).vector();
-
-            DocumentEmbedding de = new DocumentEmbedding();
-            de.setChunkText(chunk);
-            de.setEmbedding(convertToVectorString(vector));
-            de.setDocumentId(savedDoc.getId());
-
-            embeddingRepository.save(de);
-
-            count++;
-        }
-
-        embeddingRepository.flush(); // 🔥 VERY IMPORTANT
-
-        System.out.println("✅ Saved embeddings: " + count);
-
-    } catch (Exception e) {
-        e.printStackTrace();
-        throw new RuntimeException("❌ File processing failed");
     }
-}
 
-    // =========================
-    // ✅ GET USER DOCUMENTS
-    // =========================
     public List<Document> getDocumentsByUser(String username) {
         return documentRepository.findByUserUsername(username);
     }
 
-    // =========================
-    // ✅ CHECK DUPLICATE FILE
-    // =========================
     public boolean isFileAlreadyExists(String fileName, String username) {
         return documentRepository
                 .existsByFileNameAndUserUsername(fileName, username);
     }
 
-    // =========================
-    // ✅ DEBUG (OPTIONAL)
-    // =========================
     public String debugData() {
         long docCount = documentRepository.count();
         long embedCount = embeddingRepository.count();
         return "Documents: " + docCount + " | Embeddings: " + embedCount;
     }
 
-    // =========================
-    // ✅ CLEAR DB (OPTIONAL)
-    // =========================
     public void clearAll() {
         embeddingRepository.deleteAll();
         documentRepository.deleteAll();
     }
 
-    // =========================
-    // ✅ VECTOR CONVERTER
-    // =========================
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {

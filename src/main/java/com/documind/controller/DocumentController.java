@@ -87,6 +87,7 @@ public String clearAll() {
 public ResponseEntity<?> debug() {
     return ResponseEntity.ok(documentService.debugData());
 }
+
     // =========================
     // ✅ Get Document History
     // =========================
