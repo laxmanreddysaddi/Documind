@@ -5,7 +5,6 @@ const BASE_URL =
   process.env.REACT_APP_API_URL ||
   "https://documind-backend-30m4.onrender.com/api";
 
-// ✅ AXIOS INSTANCE
 const api = axios.create({
   baseURL: BASE_URL,
 });
@@ -51,7 +50,6 @@ export default function App() {
   // =========================
   useEffect(() => {
     const loginTime = localStorage.getItem("loginTime");
-
     if (loginTime) {
       const now = Date.now();
       if (now - loginTime > 3600000) {
@@ -68,14 +66,16 @@ export default function App() {
   const fetchDocuments = async () => {
     try {
       const res = await api.get("/documents/history", {
-        params: { username: localStorage.getItem("username") },
+        params: {
+          username: localStorage.getItem("username") // ✅ FIX
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
 
       setDocuments(res.data || []);
 
     } catch (e) {
-      console.log("Doc fetch failed", e);
+      console.log(e);
     }
   };
 
@@ -124,7 +124,6 @@ export default function App() {
     if (!question.trim()) return;
 
     setMessages((prev) => [...prev, { role: "user", text: question }]);
-
     setQuestion("");
     setLoading(true);
 
@@ -132,7 +131,7 @@ export default function App() {
       const res = await api.get("/chat", {
         params: {
           question,
-          username: localStorage.getItem("username")
+          username: localStorage.getItem("username") // ✅ FIX
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -154,26 +153,26 @@ export default function App() {
   };
 
   // =========================
-  // 📤 UPLOAD
+  // 📤 FILE UPLOAD (FINAL FIX)
   // =========================
   const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const currentUser = localStorage.getItem("username");
-
-    console.log("Uploading as:", currentUser);
-
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("username", currentUser);
 
     try {
       setUploading(true);
       setProgress(0);
 
       await api.post("/documents/upload", formData, {
-        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          username: localStorage.getItem("username") // ✅ FIX
+        },
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
         onUploadProgress: (event) => {
           const percent = Math.round((event.loaded * 100) / event.total);
           setProgress(percent);
