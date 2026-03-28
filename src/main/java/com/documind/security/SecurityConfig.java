@@ -36,11 +36,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/chat/**").authenticated()
 
                 .anyRequest().authenticated()
-            )
+            );
 
-            // ✅ JWT FILTER
-            .addFilterBefore(jwtAuthFilter,
-                    UsernamePasswordAuthenticationFilter.class);
+            
 
         return http.build();
     }

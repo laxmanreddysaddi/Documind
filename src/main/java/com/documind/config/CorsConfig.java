@@ -14,12 +14,11 @@ public class CorsConfig {
 
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "https://documind-l6pp3uz0v-laxmanreddysaddis-projects.vercel.app"
-        ));
+        config.setAllowedOriginPatterns(List.of("*")); // ✅ IMPORTANT
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of(
+                "GET", "POST", "PUT", "DELETE", "OPTIONS"
+        ));
 
         config.setAllowedHeaders(List.of("*"));
 
