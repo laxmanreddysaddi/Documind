@@ -2,24 +2,42 @@ package com.documind.service;
 
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 
 @Service
 public class ChatService {
 
     private final RagService ragService;
 
+    // 🔥 In-memory chat storage (per user)
+    private final Map<String, List<String>> chatHistory = new HashMap<>();
+
     public ChatService(RagService ragService) {
         this.ragService = ragService;
     }
 
-    // ✅ Normal chat
-    public String ask(String question, String username) {
-        return ragService.ask(question, username);
+    // ✅ UPDATED METHOD (IMPORTANT)
+    public String ask(String question, String username, Long documentId) {
+
+        // 🔥 Call RAG with documentId
+        String answer = ragService.ask(question, documentId);
+
+        // ✅ Save chat history per user
+        chatHistory.putIfAbsent(username, new ArrayList<>());
+
+        chatHistory.get(username).add("Q: " + question);
+        chatHistory.get(username).add("A: " + answer);
+
+        return answer;
     }
 
-    // ✅ Chat history (dummy for now)
+    // ✅ Get chat history
     public List<String> getChatHistory(String username) {
-        return List.of("No chat history yet");
+        return chatHistory.getOrDefault(username, new ArrayList<>());
+    }
+
+    // ✅ Clear chat history (NEW FEATURE)
+    public void clearChat(String username) {
+        chatHistory.remove(username);
     }
 }

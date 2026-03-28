@@ -5,16 +5,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 public class SecurityConfig {
-
-    private final JwtAuthFilter jwtAuthFilter;
-
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
-        this.jwtAuthFilter = jwtAuthFilter;
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -24,22 +17,10 @@ public class SecurityConfig {
             .cors(cors -> {})
 
             .authorizeHttpRequests(auth -> auth
-
-                // ✅ Allow preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // ✅ Public APIs
-                .requestMatchers("/api/auth/**").permitAll()
-
-                // 🔒 Protected APIs
-                .requestMatchers("/api/documents/**").authenticated()
-                .requestMatchers("/api/chat/**").authenticated()
-
+                .requestMatchers("/api/**").permitAll()
                 .anyRequest().authenticated()
-            )
-
-            // 🔥 ADD THIS LINE (CRITICAL)
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            );
 
         return http.build();
     }

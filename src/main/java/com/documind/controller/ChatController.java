@@ -1,42 +1,55 @@
 package com.documind.controller;
 
-import com.documind.model.ChatHistory;
-import com.documind.repository.ChatHistoryRepository;
-import com.documind.service.RagService;
+import com.documind.service.ChatService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/chat")
 @CrossOrigin("*")
 public class ChatController {
 
-    private final RagService ragService;
-    private final ChatHistoryRepository chatHistoryRepository;
+    private final ChatService chatService; // ✅ FIX
 
-    public ChatController(RagService ragService,
-                          ChatHistoryRepository chatHistoryRepository) {
-        this.ragService = ragService;
-        this.chatHistoryRepository = chatHistoryRepository;
+    // ✅ CONSTRUCTOR FIX
+    public ChatController(ChatService chatService) {
+        this.chatService = chatService;
     }
 
-    // ✅ Chat API
-    @GetMapping("/chat")
-    public String chat(@RequestParam String question,
-                       @RequestParam String username) {
-        return ragService.ask(question, username);
+    // =========================
+    // ✅ ASK QUESTION
+    // =========================
+    @PostMapping("/ask")
+    public ResponseEntity<?> ask(
+            @RequestParam String question,
+            @RequestParam String username,
+            @RequestParam Long documentId
+    ) {
+        return ResponseEntity.ok(
+                chatService.ask(question, username, documentId) // ✅ FIX
+        );
     }
 
-    // ✅ Get chat history
-    @GetMapping("/history/{username}")
-    public List<ChatHistory> getHistory(@PathVariable String username) {
-        return chatHistoryRepository.findByUserUsername(username);
+    // =========================
+    // ✅ GET CHAT HISTORY
+    // =========================
+    @GetMapping("/history")
+    public ResponseEntity<?> history(
+            @RequestParam String username
+    ) {
+        return ResponseEntity.ok(
+                chatService.getChatHistory(username)
+        );
     }
 
-    // ✅ Clear chat history
-    @DeleteMapping("/history/{username}")
-    public void clearHistory(@PathVariable String username) {
-        chatHistoryRepository.deleteByUserUsername(username);
+    // =========================
+    // ✅ CLEAR CHAT
+    // =========================
+    @DeleteMapping("/clear")
+    public ResponseEntity<?> clear(
+            @RequestParam String username
+    ) {
+        chatService.clearChat(username);
+        return ResponseEntity.ok("✅ Chat cleared");
     }
 }

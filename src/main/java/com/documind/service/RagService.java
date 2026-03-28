@@ -1,10 +1,8 @@
 package com.documind.service;
 
-import com.documind.model.Document;
 import com.documind.model.DocumentEmbedding;
 import com.documind.repository.DocumentEmbeddingRepository;
-import com.documind.repository.DocumentRepository;
-
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -12,103 +10,100 @@ import java.util.List;
 @Service
 public class RagService {
 
-    private final DocumentEmbeddingRepository embeddingRepository;
-    private final DocumentRepository documentRepository;
     private final HuggingFaceEmbeddingService embeddingService;
+    private final DocumentEmbeddingRepository embeddingRepository;
+    private final ChatLanguageModel chatModel;
 
     public RagService(
+            HuggingFaceEmbeddingService embeddingService,
             DocumentEmbeddingRepository embeddingRepository,
-            DocumentRepository documentRepository,
-            HuggingFaceEmbeddingService embeddingService
+            ChatLanguageModel chatModel
     ) {
-        this.embeddingRepository = embeddingRepository;
-        this.documentRepository = documentRepository;
         this.embeddingService = embeddingService;
+        this.embeddingRepository = embeddingRepository;
+        this.chatModel = chatModel;
     }
 
-    public String ask(String question, String username) {
-
-        float THRESHOLD = 0.6f;
+    public String ask(String question, Long documentId) {
 
         try {
+            System.out.println("🔥 ===== RAG STARTED =====");
+            System.out.println("❓ Question: " + question);
+            System.out.println("📄 Document ID: " + documentId);
+
             float[] queryVector = embeddingService.embed(question).vector();
 
-            List<Document> docs = documentRepository.findByUserUsername(username);
-
-            if (docs.isEmpty()) {
-                return "⚠ Upload document first.";
-            }
-
-            List<Long> docIds = docs.stream().map(Document::getId).toList();
-
+            // ✅ ONLY selected doc
             List<DocumentEmbedding> embeddings =
-                    embeddingRepository.findByDocumentIds(docIds);
+                    embeddingRepository.findByDocumentId(documentId);
+
+            System.out.println("📊 Embeddings: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
-                return "⚠ No data found.";
+                return "❌ No embeddings found";
             }
 
-            List<DocumentEmbedding> top = embeddings.stream()
-                    .sorted((a, b) -> Float.compare(
-                            cosine(queryVector, stringToVector(b.getEmbedding())),
-                            cosine(queryVector, stringToVector(a.getEmbedding()))
-                    ))
+            List<String> topChunks = embeddings.stream()
+                    .map(e -> new Object[]{
+                            e.getChunkText(),
+                            cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
+                    })
+                    .filter(e -> (float)e[1] > 0.5) // 🔥 STRICT FILTER
+                    .sorted((a, b) -> Float.compare((float)b[1], (float)a[1]))
                     .limit(3)
+                    .map(e -> (String)e[0])
                     .toList();
 
-            StringBuilder ans = new StringBuilder("📄 Answer:\n\n");
-
-            int count = 0;
-
-            for (DocumentEmbedding e : top) {
-
-                float score = cosine(
-                        queryVector,
-                        stringToVector(e.getEmbedding())
-                );
-
-                if (score >= THRESHOLD) {
-                    ans.append("- ").append(e.getChunkText()).append("\n\n");
-                    count++;
-                }
+            if (topChunks.isEmpty()) {
+                return "Not found in document";
             }
 
-            if (count == 0) {
-                return "⚠ Not found in document.";
+            StringBuilder context = new StringBuilder();
+            for (String chunk : topChunks) {
+                context.append(chunk).append("\n\n");
             }
 
-            return ans.toString();
+            String prompt =
+                    "You are a strict document QA system.\n" +
+                    "Answer ONLY from context.\n" +
+                    "If not found say: Not found in document.\n\n" +
+                    "Context:\n" + context +
+                    "\nQuestion:\n" + question +
+                    "\nAnswer:";
+
+            return chatModel.generate(prompt);
 
         } catch (Exception e) {
-            return "❌ Error";
+            e.printStackTrace();
+            return "❌ Error: " + e.getMessage();
         }
     }
 
-    private float cosine(float[] a, float[] b) {
+    private float cosineSimilarity(float[] a, float[] b) {
         int len = Math.min(a.length, b.length);
-        float dot = 0, na = 0, nb = 0;
+
+        float dot = 0, normA = 0, normB = 0;
 
         for (int i = 0; i < len; i++) {
             dot += a[i] * b[i];
-            na += a[i] * a[i];
-            nb += b[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
         }
 
-        if (na == 0 || nb == 0) return 0;
+        if (normA == 0 || normB == 0) return 0;
 
-        return (float)(dot / (Math.sqrt(na) * Math.sqrt(nb)));
+        return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
-    private float[] stringToVector(String s) {
-        s = s.replace("[", "").replace("]", "");
-        String[] parts = s.split(",");
+    private float[] stringToVector(String str) {
+        str = str.replace("[", "").replace("]", "");
+        String[] parts = str.split(",");
 
-        float[] v = new float[parts.length];
-
+        float[] vector = new float[parts.length];
         for (int i = 0; i < parts.length; i++) {
-            v[i] = Float.parseFloat(parts[i]);
+            vector[i] = Float.parseFloat(parts[i]);
         }
 
-        return v;
+        return vector;
     }
 }
