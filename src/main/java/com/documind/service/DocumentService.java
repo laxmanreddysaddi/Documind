@@ -5,17 +5,13 @@ import com.documind.model.DocumentEmbedding;
 import com.documind.repository.DocumentEmbeddingRepository;
 import com.documind.repository.DocumentRepository;
 
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -35,9 +31,7 @@ public class DocumentService {
         this.embeddingService = embeddingService;
     }
 
-    // =========================
-    // ✅ FAST + SAFE UPLOAD
-    // =========================
+    // 🔥 FINAL FIXED METHOD
     @Transactional
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
@@ -46,149 +40,85 @@ public class DocumentService {
 
             String fileName = file.getOriginalFilename();
 
-            // ✅ DUPLICATE CHECK
-            if (documentRepository.existsByFileNameAndUserUsername(fileName, username)) {
+            // ✅ Duplicate check
+            boolean exists = documentRepository
+                    .existsByFileNameAndUserUsername(fileName, username);
+
+            if (exists) {
                 System.out.println("⚠ File already exists");
                 return;
             }
 
-            // =========================
-            // ✅ SAVE DOCUMENT
-            // =========================
+            // ✅ Save document
             Document doc = new Document();
             doc.setFileName(fileName);
             doc.setFileSize(file.getSize());
             doc.setUserUsername(username);
             doc.setUploadedAt(LocalDateTime.now());
 
-            documentRepository.saveAndFlush(doc);
+            Document savedDoc = documentRepository.save(doc);
+            documentRepository.flush();
 
-            Long docId = doc.getId();
+            System.out.println("📄 Doc ID: " + savedDoc.getId());
 
-            if (docId == null) {
-                throw new RuntimeException("❌ Document ID is NULL");
-            }
-
-            System.out.println("📄 Doc ID: " + docId);
-
-            // =========================
-            // ✅ EXTRACT TEXT
-            // =========================
-            String content = "";
-
-            String lower = fileName.toLowerCase();
-
-            if (lower.endsWith(".txt")) {
-
-                content = new String(file.getBytes(), StandardCharsets.UTF_8);
-
-            } else if (lower.endsWith(".pdf")) {
-
-                try (PDDocument pdf = PDDocument.load(file.getInputStream())) {
-                    PDFTextStripper stripper = new PDFTextStripper();
-                    content = stripper.getText(pdf);
-                }
-
-            } else if (lower.endsWith(".docx")) {
-
-                try (XWPFDocument docx = new XWPFDocument(file.getInputStream())) {
-                    XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
-                    content = extractor.getText();
-                }
-            }
-
-            if (content == null || content.trim().isEmpty()) {
-                throw new RuntimeException("❌ Empty content extracted");
-            }
-
+            // ✅ Read file content
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
             System.out.println("📄 Content length: " + content.length());
 
-            // =========================
-            // ✅ FAST CHUNKING (LIMITED)
-            // =========================
+            // ✅ Split into chunks
             String[] chunks = content.split("\\. ");
 
-            int MAX_CHUNKS = 200; // 🔥 PERFORMANCE FIX
-            int count = 0;
+            int MAX_CHUNKS = 20; // 🔥 IMPORTANT (prevents crash)
+
+            List<DocumentEmbedding> embeddingList = new ArrayList<>();
 
             for (int i = 0; i < Math.min(chunks.length, MAX_CHUNKS); i++) {
 
                 String chunk = chunks[i];
 
-                if (chunk == null || chunk.trim().isEmpty()) continue;
+                if (chunk.trim().isEmpty()) continue;
 
-                try {
-                    float[] vector = embeddingService.embed(chunk).vector();
+                float[] vector = embeddingService.embed(chunk).vector();
+                String vectorString = convertToVectorString(vector);
 
-                    if (vector == null || vector.length == 0) continue;
+                DocumentEmbedding de = new DocumentEmbedding();
+                de.setChunkText(chunk);
+                de.setEmbedding(vectorString);
+                de.setDocumentId(savedDoc.getId());
 
-                    DocumentEmbedding de = new DocumentEmbedding();
-                    de.setChunkText(chunk.trim());
-                    de.setEmbedding(convertToVectorString(vector));
-                    de.setDocumentId(docId);
-
-                    embeddingRepository.save(de);
-
-                    count++;
-
-                    // ✅ LOG PROGRESS
-                    if (count % 20 == 0) {
-                        System.out.println("⏳ Processed chunks: " + count);
-                    }
-
-                } catch (Exception e) {
-                    System.out.println("❌ Failed chunk, skipping...");
-                }
+                embeddingList.add(de);
             }
 
-            embeddingRepository.flush();
+            // ✅ Save all at once (VERY IMPORTANT)
+            embeddingRepository.saveAll(embeddingList);
 
-            // ❌ IMPORTANT: rollback if nothing saved
-            if (count == 0) {
-                throw new RuntimeException("❌ No embeddings generated");
-            }
-
-            System.out.println("✅ Saved embeddings: " + count);
+            System.out.println("✅ Saved embeddings: " + embeddingList.size());
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("❌ Upload failed: " + e.getMessage());
+            throw new RuntimeException("❌ File processing failed");
         }
     }
 
-    // =========================
-    // ✅ HISTORY
-    // =========================
+    public boolean isFileAlreadyExists(String fileName, String username) {
+        return documentRepository
+                .existsByFileNameAndUserUsername(fileName, username);
+    }
+
     public List<Document> getDocumentsByUser(String username) {
         return documentRepository.findByUserUsername(username);
     }
 
-    // =========================
-    // ✅ DUPLICATE CHECK
-    // =========================
-    public boolean isFileAlreadyExists(String fileName, String username) {
-        return documentRepository.existsByFileNameAndUserUsername(fileName, username);
-    }
-
-    // =========================
-    // ✅ DEBUG
-    // =========================
     public String debugData() {
-        return "Documents: " + documentRepository.count()
-                + " | Embeddings: " + embeddingRepository.count();
+        return "Documents: " + documentRepository.count() +
+               " | Embeddings: " + embeddingRepository.count();
     }
 
-    // =========================
-    // ✅ CLEAR DB (USE ONCE)
-    // =========================
     public void clearAll() {
-        embeddingRepository.deleteAll();
-        documentRepository.deleteAll();
-    }
+    embeddingRepository.deleteAll();
+    documentRepository.deleteAll();
+}
 
-    // =========================
-    // ✅ VECTOR FORMAT
-    // =========================
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
