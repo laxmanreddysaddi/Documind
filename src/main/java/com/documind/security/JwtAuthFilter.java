@@ -28,32 +28,45 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        // ✅ STEP 1: Skip authentication endpoints
         String path = request.getServletPath();
 
-        if (path.startsWith("/api/auth")) {
+        // ==============================
+        // ✅ SKIP PUBLIC APIs (VERY IMPORTANT)
+        // ==============================
+        if (path.startsWith("/api/auth") ||
+            path.startsWith("/api/documents") ||
+            path.startsWith("/api/chat")) {
+
             filterChain.doFilter(request, response);
             return;
         }
 
-        // ✅ STEP 2: Get Authorization header
+        // ==============================
+        // 🔐 GET AUTH HEADER
+        // ==============================
         String authHeader = request.getHeader("Authorization");
 
-        // If no token → continue request
+        // No token → continue without blocking
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // ✅ STEP 3: Extract token
+        // ==============================
+        // 🔑 EXTRACT TOKEN
+        // ==============================
         String token = authHeader.substring(7);
 
         try {
 
-            // ✅ STEP 4: Extract username from token
+            // ==============================
+            // 👤 EXTRACT USERNAME
+            // ==============================
             String username = jwtService.extractUsername(token);
 
-            // ✅ STEP 5: Set authentication if valid
+            // ==============================
+            // ✅ SET AUTHENTICATION
+            // ==============================
             if (username != null &&
                     SecurityContextHolder.getContext().getAuthentication() == null) {
 
@@ -69,9 +82,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         } catch (Exception e) {
             // ❌ Invalid token → ignore (do not crash)
+            System.out.println("⚠ Invalid JWT token");
         }
 
-        // ✅ STEP 6: Continue filter chain
+        // ==============================
+        // 🔁 CONTINUE REQUEST
+        // ==============================
         filterChain.doFilter(request, response);
     }
 }
