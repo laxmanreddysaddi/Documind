@@ -32,33 +32,46 @@ public class RagService {
     public String ask(String question, String username) {
 
         try {
-            System.out.println("🔥 RAG STARTED");
+            System.out.println("\n🔥 ===== RAG STARTED =====");
+            System.out.println("❓ Question: " + question);
 
-            // ✅ 1. Query embedding
+            // =========================
+            // 1️⃣ Generate query embedding
+            // =========================
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // ✅ 2. Get user documents
+            // =========================
+            // 2️⃣ Fetch user documents
+            // =========================
             List<Document> docs = documentRepository.findByUserUsername(username);
 
             if (docs.isEmpty()) {
                 return "⚠ Please upload a document first.";
             }
 
-            List<Long> docIds = docs.stream().map(Document::getId).toList();
+            List<Long> docIds = docs.stream()
+                    .map(Document::getId)
+                    .toList();
+
             System.out.println("📄 User Doc IDs: " + docIds);
 
-            // ✅ 3. Fetch embeddings (FIXED)
+            // =========================
+            // 3️⃣ Fetch embeddings
+            // =========================
             List<DocumentEmbedding> embeddings =
                     embeddingRepository.findByDocumentIdIn(docIds);
 
             System.out.println("📊 Embeddings fetched: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
-                return "⚠ No embeddings found.";
+                return "⚠ Document processed but no embeddings found.";
             }
 
-            // ✅ 4. Find top chunks
+            // =========================
+            // 4️⃣ Rank by similarity
+            // =========================
             List<String> topChunks = embeddings.stream()
+                    .filter(e -> e.getEmbedding() != null)
                     .sorted((a, b) -> Float.compare(
                             cosineSimilarity(queryVector, stringToVector(b.getEmbedding())),
                             cosineSimilarity(queryVector, stringToVector(a.getEmbedding()))
@@ -67,24 +80,43 @@ public class RagService {
                     .map(DocumentEmbedding::getChunkText)
                     .toList();
 
-            // ✅ 5. Build context
+            if (topChunks.isEmpty()) {
+                return "⚠ No relevant content found.";
+            }
+
+            // =========================
+            // 5️⃣ Build context
+            // =========================
             StringBuilder context = new StringBuilder();
             for (String chunk : topChunks) {
                 context.append(chunk).append("\n\n");
             }
 
-            // ✅ STRICT PROMPT
+            System.out.println("📚 Context built");
+
+            // =========================
+            // 6️⃣ Strict prompt
+            // =========================
             String prompt =
                     "You are DocuMind AI.\n\n" +
                     "STRICT RULES:\n" +
                     "1. Answer ONLY from the given context.\n" +
                     "2. Do NOT use outside knowledge.\n" +
-                    "3. If not found, say 'Not found in document'.\n\n" +
-                    "CONTEXT:\n" + context +
-                    "\nQUESTION:\n" + question +
-                    "\nANSWER:";
+                    "3. If answer is NOT in context, reply EXACTLY: Not found in document\n" +
+                    "4. Keep answer short and clear.\n\n" +
 
-            return chatModel.generate(prompt);
+                    "CONTEXT:\n" + context + "\n\n" +
+                    "QUESTION:\n" + question + "\n\n" +
+                    "ANSWER:";
+
+            // =========================
+            // 7️⃣ Generate answer
+            // =========================
+            String response = chatModel.generate(prompt);
+
+            System.out.println("✅ Answer generated");
+
+            return response;
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -92,7 +124,11 @@ public class RagService {
         }
     }
 
+    // =========================
+    // Cosine Similarity
+    // =========================
     private float cosineSimilarity(float[] a, float[] b) {
+
         int length = Math.min(a.length, b.length);
 
         float dot = 0, normA = 0, normB = 0;
@@ -108,13 +144,25 @@ public class RagService {
         return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
+    // =========================
+    // String → Vector
+    // =========================
     private float[] stringToVector(String str) {
+
+        if (str == null || str.isEmpty()) return new float[0];
+
         str = str.replace("[", "").replace("]", "");
+
         String[] parts = str.split(",");
 
         float[] vector = new float[parts.length];
+
         for (int i = 0; i < parts.length; i++) {
-            vector[i] = Float.parseFloat(parts[i]);
+            try {
+                vector[i] = Float.parseFloat(parts[i]);
+            } catch (Exception e) {
+                vector[i] = 0;
+            }
         }
 
         return vector;

@@ -25,22 +25,28 @@ public class DocumentController {
     @PostMapping("/upload")
     public ResponseEntity<?> uploadDocument(
             @RequestParam("file") MultipartFile file,
-            @RequestParam String username // 🔥 IMPORTANT FIX
+            @RequestParam("username") String username
     ) {
 
         System.out.println("🔥 Upload API called");
+        System.out.println("👤 Username: " + username);
 
-        // ❌ Empty file
+        // ❌ Validate username
+        if (username == null || username.isEmpty()) {
+            return ResponseEntity.badRequest().body("❌ Username is required");
+        }
+
+        // ❌ Empty file check
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body("❌ File is empty");
         }
 
-        // ❌ File size (5MB)
+        // ❌ File size check (5MB)
         if (file.getSize() > 5 * 1024 * 1024) {
             return ResponseEntity.badRequest().body("❌ File too large (Max 5MB)");
         }
 
-        // ❌ File type
+        // ❌ File type validation
         String fileName = file.getOriginalFilename();
 
         if (fileName == null ||
@@ -54,14 +60,14 @@ public class DocumentController {
 
         try {
 
-            // ✅ DUPLICATE CHECK
+            // ✅ Check duplicate file
             boolean exists = documentService.isFileAlreadyExists(fileName, username);
 
             if (exists) {
                 return ResponseEntity.ok("⚠ File already uploaded");
             }
 
-            // ✅ SAVE
+            // ✅ Save document + embeddings
             documentService.saveDocumentMetadata(file, username);
 
             return ResponseEntity.ok("✅ Document uploaded successfully");
@@ -78,10 +84,18 @@ public class DocumentController {
     // =========================
     @GetMapping("/history")
     public ResponseEntity<?> getDocumentHistory(
-            @RequestParam String username // 🔥 FIX
+            @RequestParam("username") String username
     ) {
 
+        System.out.println("📂 Fetching documents for: " + username);
+
+        // ❌ Validate username
+        if (username == null || username.isEmpty()) {
+            return ResponseEntity.badRequest().body("❌ Username is required");
+        }
+
         try {
+
             List<Document> documents =
                     documentService.getDocumentsByUser(username);
 

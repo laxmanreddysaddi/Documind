@@ -182,12 +182,11 @@ export default function App() {
       setProgress(0);
 
       await api.post("/documents/upload", formData, {
-        headers: { Authorization: `Bearer ${token}` },
-        onUploadProgress: (event) => {
-          const percent = Math.round((event.loaded * 100) / event.total);
-          setProgress(percent);
-        },
-      });
+  onUploadProgress: (event) => {
+    const percent = Math.round((event.loaded * 100) / event.total);
+    setProgress(percent);
+  },
+});
 
       alert("✅ Uploaded successfully");
       fetchDocuments();
