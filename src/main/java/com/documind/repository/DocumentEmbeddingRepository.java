@@ -6,9 +6,9 @@ import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 
-public interface DocumentEmbeddingRepository extends JpaRepository<DocumentEmbedding, Long> {
+public interface DocumentEmbeddingRepository
+        extends JpaRepository<DocumentEmbedding, Long> {
 
-    // ✅ FIXED QUERY (IMPORTANT)
-    @Query("SELECT de FROM DocumentEmbedding de WHERE de.documentId IN :docIds")
+    @Query("SELECT d FROM DocumentEmbedding d WHERE d.documentId IN :docIds")
     List<DocumentEmbedding> findByDocumentIds(List<Long> docIds);
 }

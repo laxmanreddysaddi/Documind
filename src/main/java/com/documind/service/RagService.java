@@ -28,88 +28,87 @@ public class RagService {
 
     public String ask(String question, String username) {
 
-        try {
-            System.out.println("🔥 RAG STARTED");
+        float THRESHOLD = 0.6f;
 
-            // ✅ 1. Convert question → vector
+        try {
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // ✅ 2. Get user documents
             List<Document> docs = documentRepository.findByUserUsername(username);
 
             if (docs.isEmpty()) {
-                return "⚠ Please upload a document first.";
+                return "⚠ Upload document first.";
             }
 
             List<Long> docIds = docs.stream().map(Document::getId).toList();
 
-            // ✅ 3. Fetch embeddings
             List<DocumentEmbedding> embeddings =
                     embeddingRepository.findByDocumentIds(docIds);
 
             if (embeddings.isEmpty()) {
-                return "⚠ No data found in document.";
+                return "⚠ No data found.";
             }
 
-            // ✅ 4. Sort by similarity (IMPORTANT)
-            List<String> topChunks = embeddings.stream()
+            List<DocumentEmbedding> top = embeddings.stream()
                     .sorted((a, b) -> Float.compare(
-                            cosineSimilarity(queryVector, stringToVector(b.getEmbedding())),
-                            cosineSimilarity(queryVector, stringToVector(a.getEmbedding()))
+                            cosine(queryVector, stringToVector(b.getEmbedding())),
+                            cosine(queryVector, stringToVector(a.getEmbedding()))
                     ))
                     .limit(3)
-                    .map(DocumentEmbedding::getChunkText)
                     .toList();
 
-            // ✅ 5. Build answer
-            StringBuilder answer = new StringBuilder("📄 Answer:\n\n");
+            StringBuilder ans = new StringBuilder("📄 Answer:\n\n");
 
-            for (String chunk : topChunks) {
-                answer.append("- ").append(chunk).append("\n\n");
+            int count = 0;
+
+            for (DocumentEmbedding e : top) {
+
+                float score = cosine(
+                        queryVector,
+                        stringToVector(e.getEmbedding())
+                );
+
+                if (score >= THRESHOLD) {
+                    ans.append("- ").append(e.getChunkText()).append("\n\n");
+                    count++;
+                }
             }
 
-            return answer.toString();
+            if (count == 0) {
+                return "⚠ Not found in document.";
+            }
+
+            return ans.toString();
 
         } catch (Exception e) {
-            e.printStackTrace();
-            return "❌ Error: " + e.getMessage();
+            return "❌ Error";
         }
     }
 
-    // ===============================
-    // ✅ COSINE SIMILARITY
-    // ===============================
-    private float cosineSimilarity(float[] a, float[] b) {
+    private float cosine(float[] a, float[] b) {
+        int len = Math.min(a.length, b.length);
+        float dot = 0, na = 0, nb = 0;
 
-        int length = Math.min(a.length, b.length);
-
-        float dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < len; i++) {
             dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
         }
 
-        if (normA == 0 || normB == 0) return 0;
+        if (na == 0 || nb == 0) return 0;
 
-        return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
+        return (float)(dot / (Math.sqrt(na) * Math.sqrt(nb)));
     }
 
-    // ===============================
-    // ✅ STRING → VECTOR
-    // ===============================
-    private float[] stringToVector(String str) {
+    private float[] stringToVector(String s) {
+        s = s.replace("[", "").replace("]", "");
+        String[] parts = s.split(",");
 
-        str = str.replace("[", "").replace("]", "");
-        String[] parts = str.split(",");
-
-        float[] vector = new float[parts.length];
+        float[] v = new float[parts.length];
 
         for (int i = 0; i < parts.length; i++) {
-            vector[i] = Float.parseFloat(parts[i]);
+            v[i] = Float.parseFloat(parts[i]);
         }
 
-        return vector;
+        return v;
     }
 }

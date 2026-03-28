@@ -37,27 +37,17 @@ public class DocumentService {
         this.embeddingService = embeddingService;
     }
 
-    // ====================================
-    // ✅ MAIN UPLOAD METHOD (FINAL)
-    // ====================================
     @Transactional
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         try {
-            System.out.println("🔥 Processing document...");
-
             String fileName = file.getOriginalFilename();
 
-            // ✅ Duplicate check
             boolean exists = documentRepository
                     .existsByFileNameAndUserUsername(fileName, username);
 
-            if (exists) {
-                System.out.println("⚠ File already exists");
-                return;
-            }
+            if (exists) return;
 
-            // ✅ Save document
             Document doc = new Document();
             doc.setFileName(fileName);
             doc.setFileSize(file.getSize());
@@ -65,66 +55,44 @@ public class DocumentService {
             doc.setUploadedAt(LocalDateTime.now());
 
             Document savedDoc = documentRepository.save(doc);
-            documentRepository.flush();
 
-            System.out.println("📄 Doc ID: " + savedDoc.getId());
-
-            // ====================================
-            // ✅ EXTRACT CONTENT (SAFE)
-            // ====================================
             String content = extractText(file);
+            content = cleanText(content);
 
-            content = cleanText(content); // 🔥 IMPORTANT
-
-            System.out.println("📄 Content length: " + content.length());
-
-            // ====================================
-            // ✅ SPLIT INTO CHUNKS
-            // ====================================
             String[] chunks = content.split("\\. ");
 
-            int MAX_CHUNKS = 20; // 🔥 Prevent Render crash
+            int MAX_CHUNKS = 20;
 
-            List<DocumentEmbedding> embeddingList = new ArrayList<>();
+            List<DocumentEmbedding> list = new ArrayList<>();
 
             for (int i = 0; i < Math.min(chunks.length, MAX_CHUNKS); i++) {
 
                 String chunk = cleanText(chunks[i]);
-
                 if (chunk.isEmpty()) continue;
 
                 float[] vector;
-
                 try {
                     vector = embeddingService.embed(chunk).vector();
                 } catch (Exception e) {
-                    continue; // skip bad chunk
+                    continue;
                 }
-
-                String vectorString = convertToVectorString(vector);
 
                 DocumentEmbedding de = new DocumentEmbedding();
                 de.setChunkText(chunk);
-                de.setEmbedding(vectorString);
+                de.setEmbedding(convertToVectorString(vector));
                 de.setDocumentId(savedDoc.getId());
 
-                embeddingList.add(de);
+                list.add(de);
             }
 
-            // ✅ Batch save (FAST + SAFE)
-            embeddingRepository.saveAll(embeddingList);
-
-            System.out.println("✅ Saved embeddings: " + embeddingList.size());
+            embeddingRepository.saveAll(list);
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("❌ File processing failed");
+            throw new RuntimeException("Upload failed");
         }
     }
 
-    // ====================================
-    // ✅ TEXT EXTRACTION (PDF/DOCX/TXT)
-    // ====================================
     private String extractText(MultipartFile file) throws Exception {
 
         String fileName = file.getOriginalFilename().toLowerCase();
@@ -150,24 +118,17 @@ public class DocumentService {
         }
 
         else {
-            throw new RuntimeException("Unsupported file type");
+            throw new RuntimeException("Unsupported file");
         }
     }
 
-    // ====================================
-    // ✅ CLEAN TEXT (FIX UTF-8 ERROR)
-    // ====================================
     private String cleanText(String text) {
-        return text
-                .replaceAll("\\u0000", "") // remove null byte
-                .replaceAll("[^\\x00-\\x7F]", " ") // remove weird chars
-                .replaceAll("\\s+", " ") // normalize spaces
-                .trim();
+        return text.replaceAll("\\u0000", "")
+                   .replaceAll("[^\\x00-\\x7F]", " ")
+                   .replaceAll("\\s+", " ")
+                   .trim();
     }
 
-    // ====================================
-    // ✅ VECTOR → STRING
-    // ====================================
     private String convertToVectorString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
@@ -178,14 +139,13 @@ public class DocumentService {
         return sb.toString();
     }
 
-    // ====================================
-    // ✅ OTHER METHODS
-    // ====================================
-    public boolean isFileAlreadyExists(String fileName, String username) {
-        return documentRepository
-                .existsByFileNameAndUserUsername(fileName, username);
-    }
+    public String debugData() {
+    long docCount = documentRepository.count();
+    long embedCount = embeddingRepository.count();
 
+    return "📊 Documents: " + docCount +
+           " | Embeddings: " + embedCount;
+}
     public List<Document> getDocumentsByUser(String username) {
         return documentRepository.findByUserUsername(username);
     }
@@ -193,10 +153,5 @@ public class DocumentService {
     public void clearAll() {
         embeddingRepository.deleteAll();
         documentRepository.deleteAll();
-    }
-
-    public String debugData() {
-        return "Documents: " + documentRepository.count() +
-               " | Embeddings: " + embeddingRepository.count();
     }
 }
