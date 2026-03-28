@@ -79,7 +79,18 @@ public class DocumentController {
                     .body("❌ Failed to clear");
         }
     }
-
+    
+    @DeleteMapping("/delete/{id}")
+public ResponseEntity<?> deleteDocument(@PathVariable Long id) {
+    try {
+        documentService.deleteDocument(id);
+        return ResponseEntity.ok("✅ Document deleted");
+    } catch (Exception e) {
+        return ResponseEntity.internalServerError()
+                .body("❌ Delete failed");
+    }
+}
+    
     // =========================
     // ✅ Debug API
     // =========================

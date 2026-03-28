@@ -150,6 +150,15 @@ public class DocumentService {
         return documentRepository.findByUserUsername(username);
     }
 
+    public void deleteDocument(Long docId) {
+
+    // delete embeddings first
+    embeddingRepository.deleteByDocumentId(docId);
+
+    // delete document
+    documentRepository.deleteById(docId);
+}
+
     public void clearAll() {
         embeddingRepository.deleteAll();
         documentRepository.deleteAll();
