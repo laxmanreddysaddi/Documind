@@ -39,94 +39,95 @@ public class DocumentService {
     // =========================
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
-        try {
-            System.out.println("🔥 Processing document...");
+    try {
+        System.out.println("🔥 Processing document...");
 
-            String fileName = file.getOriginalFilename();
+        String fileName = file.getOriginalFilename();
 
-            // ✅ DUPLICATE CHECK
-            boolean exists = documentRepository
-                    .existsByFileNameAndUserUsername(fileName, username);
-
-            if (exists) {
-                System.out.println("⚠ File already exists. Skipping upload.");
-                return;
-            }
-
-            // ✅ SAVE DOCUMENT
-            Document doc = new Document();
-            doc.setFileName(fileName);
-            doc.setFileSize(file.getSize());
-            doc.setUserUsername(username);
-            doc.setUploadedAt(LocalDateTime.now());
-
-            Document savedDoc = documentRepository.save(doc);
-            documentRepository.flush();
-
-            System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
-
-            // =========================
-            // ✅ EXTRACT CONTENT (FIXED)
-            // =========================
-            String content = "";
-
-            String lowerName = fileName.toLowerCase();
-
-            if (lowerName.endsWith(".txt")) {
-
-                content = new String(file.getBytes(), StandardCharsets.UTF_8);
-
-            } else if (lowerName.endsWith(".pdf")) {
-
-                PDDocument document = PDDocument.load(file.getInputStream());
-                PDFTextStripper stripper = new PDFTextStripper();
-                content = stripper.getText(document);
-                document.close();
-
-            } else if (lowerName.endsWith(".docx")) {
-
-                XWPFDocument docx = new XWPFDocument(file.getInputStream());
-                XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
-                content = extractor.getText();
-                docx.close();
-            }
-
-            System.out.println("📄 Extracted content length: " + content.length());
-
-            if (content.trim().isEmpty()) {
-                throw new RuntimeException("❌ No readable content in file");
-            }
-
-            // =========================
-            // ✅ SPLIT INTO CHUNKS
-            // =========================
-            String[] chunks = content.split("\\. ");
-
-            int count = 0;
-
-            for (String chunk : chunks) {
-
-                if (chunk.trim().isEmpty()) continue;
-
-                float[] vector = embeddingService.embed(chunk).vector();
-                String vectorString = convertToVectorString(vector);
-
-                DocumentEmbedding de = new DocumentEmbedding();
-                de.setChunkText(chunk);
-                de.setEmbedding(vectorString);
-                de.setDocumentId(savedDoc.getId());
-
-                embeddingRepository.save(de);
-                count++;
-            }
-
-            System.out.println("✅ Saved embeddings: " + count);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("❌ File processing failed");
+        // ✅ DUPLICATE CHECK
+        if (documentRepository.existsByFileNameAndUserUsername(fileName, username)) {
+            System.out.println("⚠ File already exists");
+            return;
         }
+
+        // ✅ SAVE DOCUMENT (IMPORTANT FIX)
+        Document doc = new Document();
+        doc.setFileName(fileName);
+        doc.setFileSize(file.getSize());
+        doc.setUserUsername(username);
+        doc.setUploadedAt(LocalDateTime.now());
+
+        Document savedDoc = documentRepository.saveAndFlush(doc);
+
+        System.out.println("📄 Saved Doc ID: " + savedDoc.getId());
+
+        if (savedDoc.getId() == null) {
+            throw new RuntimeException("❌ Document ID is NULL");
+        }
+
+        // =========================
+        // ✅ EXTRACT TEXT (WORKING)
+        // =========================
+        String content = "";
+
+        String lower = fileName.toLowerCase();
+
+        if (lower.endsWith(".txt")) {
+            content = new String(file.getBytes(), StandardCharsets.UTF_8);
+
+        } else if (lower.endsWith(".pdf")) {
+
+            PDDocument pdf = PDDocument.load(file.getInputStream());
+            PDFTextStripper stripper = new PDFTextStripper();
+            content = stripper.getText(pdf);
+            pdf.close();
+
+        } else if (lower.endsWith(".docx")) {
+
+            XWPFDocument docx = new XWPFDocument(file.getInputStream());
+            XWPFWordExtractor extractor = new XWPFWordExtractor(docx);
+            content = extractor.getText();
+            docx.close();
+        }
+
+        System.out.println("📄 Content length: " + content.length());
+
+        if (content.trim().isEmpty()) {
+            throw new RuntimeException("❌ Empty content extracted");
+        }
+
+        // =========================
+        // ✅ CHUNK + SAVE EMBEDDINGS
+        // =========================
+        String[] chunks = content.split("\\. ");
+
+        int count = 0;
+
+        for (String chunk : chunks) {
+
+            if (chunk.trim().isEmpty()) continue;
+
+            float[] vector = embeddingService.embed(chunk).vector();
+
+            DocumentEmbedding de = new DocumentEmbedding();
+            de.setChunkText(chunk);
+            de.setEmbedding(convertToVectorString(vector));
+            de.setDocumentId(savedDoc.getId());
+
+            embeddingRepository.save(de);
+
+            count++;
+        }
+
+        embeddingRepository.flush(); // 🔥 VERY IMPORTANT
+
+        System.out.println("✅ Saved embeddings: " + count);
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        throw new RuntimeException("❌ File processing failed");
     }
+}
 
     // =========================
     // ✅ GET USER DOCUMENTS
