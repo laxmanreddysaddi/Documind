@@ -12,6 +12,7 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -35,8 +36,9 @@ public class DocumentService {
     }
 
     // =========================
-    // ✅ MAIN METHOD (FIXED)
+    // ✅ FAST + SAFE UPLOAD
     // =========================
+    @Transactional
     public void saveDocumentMetadata(MultipartFile file, String username) {
 
         try {
@@ -50,16 +52,18 @@ public class DocumentService {
                 return;
             }
 
-            // ✅ SAVE DOCUMENT FIRST (CRITICAL)
+            // =========================
+            // ✅ SAVE DOCUMENT
+            // =========================
             Document doc = new Document();
             doc.setFileName(fileName);
             doc.setFileSize(file.getSize());
             doc.setUserUsername(username);
             doc.setUploadedAt(LocalDateTime.now());
 
-            documentRepository.saveAndFlush(doc); // 🔥 IMPORTANT
+            documentRepository.saveAndFlush(doc);
 
-            Long docId = doc.getId(); // ✅ GUARANTEED ID
+            Long docId = doc.getId();
 
             if (docId == null) {
                 throw new RuntimeException("❌ Document ID is NULL");
@@ -68,7 +72,7 @@ public class DocumentService {
             System.out.println("📄 Doc ID: " + docId);
 
             // =========================
-            // ✅ EXTRACT TEXT (TXT / PDF / DOCX)
+            // ✅ EXTRACT TEXT
             // =========================
             String content = "";
 
@@ -93,50 +97,62 @@ public class DocumentService {
                 }
             }
 
-            System.out.println("📄 Content length: " + content.length());
-
             if (content == null || content.trim().isEmpty()) {
                 throw new RuntimeException("❌ Empty content extracted");
             }
 
+            System.out.println("📄 Content length: " + content.length());
+
             // =========================
-            // ✅ CHUNKING (FIXED)
+            // ✅ FAST CHUNKING (LIMITED)
             // =========================
             String[] chunks = content.split("\\. ");
 
+            int MAX_CHUNKS = 200; // 🔥 PERFORMANCE FIX
             int count = 0;
 
-            for (String chunk : chunks) {
+            for (int i = 0; i < Math.min(chunks.length, MAX_CHUNKS); i++) {
+
+                String chunk = chunks[i];
 
                 if (chunk == null || chunk.trim().isEmpty()) continue;
 
-                float[] vector;
-
                 try {
-                    vector = embeddingService.embed(chunk).vector();
+                    float[] vector = embeddingService.embed(chunk).vector();
+
+                    if (vector == null || vector.length == 0) continue;
+
+                    DocumentEmbedding de = new DocumentEmbedding();
+                    de.setChunkText(chunk.trim());
+                    de.setEmbedding(convertToVectorString(vector));
+                    de.setDocumentId(docId);
+
+                    embeddingRepository.save(de);
+
+                    count++;
+
+                    // ✅ LOG PROGRESS
+                    if (count % 20 == 0) {
+                        System.out.println("⏳ Processed chunks: " + count);
+                    }
+
                 } catch (Exception e) {
-                    System.out.println("❌ Embedding failed for chunk");
-                    continue;
+                    System.out.println("❌ Failed chunk, skipping...");
                 }
-
-                if (vector == null || vector.length == 0) continue;
-
-                DocumentEmbedding de = new DocumentEmbedding();
-                de.setChunkText(chunk.trim());
-                de.setEmbedding(convertToVectorString(vector));
-                de.setDocumentId(docId); // 🔥 FIXED LINK
-
-                embeddingRepository.save(de);
-                count++;
             }
 
-            embeddingRepository.flush(); // 🔥 IMPORTANT
+            embeddingRepository.flush();
+
+            // ❌ IMPORTANT: rollback if nothing saved
+            if (count == 0) {
+                throw new RuntimeException("❌ No embeddings generated");
+            }
 
             System.out.println("✅ Saved embeddings: " + count);
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("❌ File processing failed: " + e.getMessage());
+            throw new RuntimeException("❌ Upload failed: " + e.getMessage());
         }
     }
 
