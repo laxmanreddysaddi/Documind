@@ -59,7 +59,7 @@ public class RagService {
             // 3️⃣ Fetch embeddings
             // =========================
             List<DocumentEmbedding> embeddings =
-                    embeddingRepository.findByDocumentIdIn(docIds);
+                    embeddingRepository.findByDocumentIds(docIds);
 
             System.out.println("📊 Embeddings fetched: " + embeddings.size());
 
