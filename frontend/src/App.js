@@ -1,87 +1,87 @@
-import React, { useEffect, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-function App() {
+const BASE_URL =
+  process.env.REACT_APP_API_URL ||
+  "https://documind-backend-30m4.onrender.com/api";
 
-  // =========================
-  // 🔥 STATES
-  // =========================
-  const [username, setUsername] = useState("laxman");
+const api = axios.create({
+  baseURL: BASE_URL,
+});
+
+// ✅ TOKEN
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+export default function App() {
+
+  // 🔐 AUTH
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState(localStorage.getItem("username") || "");
+  const [password, setPassword] = useState("");
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
+
+  // 💬 CHAT
+  const [messages, setMessages] = useState([]);
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // 📂 DOCS
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState(null);
-  const [question, setQuestion] = useState("");
-  const [chat, setChat] = useState([]);
-  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
-  const BASE_URL = "https://documind-backend-30m4.onrender.com";
+  const textareaRef = useRef(null);
 
   // =========================
-  // 🔥 LOAD DATA
-  // =========================
-  useEffect(() => {
-    fetchDocuments();
-    fetchChatHistory();
-  }, []);
-
-  // =========================
-  // 📄 FETCH DOCUMENTS
+  // 📂 FETCH DOCUMENTS
   // =========================
   const fetchDocuments = async () => {
     try {
-      const res = await axios.get(
-        `${BASE_URL}/api/documents/history?username=${username}`
-      );
-      setDocuments(res.data);
+      const res = await api.get("/documents/history", {
+        params: { username },
+      });
+      setDocuments(res.data || []);
     } catch (err) {
-      console.log("❌ Error fetching documents", err);
+      console.log("❌ Document error", err);
     }
   };
 
-  // =========================
-  // 💬 FETCH CHAT HISTORY
-  // =========================
-  const fetchChatHistory = async () => {
-    try {
-      const res = await axios.get(
-        `${BASE_URL}/api/chat/history?username=${username}`
-      );
-      setChat(res.data);
-    } catch (err) {
-      console.log("❌ Chat history error", err);
-    }
-  };
+  useEffect(() => {
+    if (token) fetchDocuments();
+  }, [token]);
 
   // =========================
-  // 📤 UPLOAD FILE
+  // 🔐 AUTH
   // =========================
-  const uploadFile = async () => {
-    if (!file) {
-      alert("Select file first");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("username", username);
+  const handleAuth = async () => {
+    const url = isLogin ? "/auth/login" : "/auth/register";
 
     try {
-      await axios.post(
-        `${BASE_URL}/api/documents/upload`,
-        formData
-      );
+      const res = await api.post(url, { username, password });
 
-      alert("✅ Uploaded");
-      fetchDocuments();
-    } catch (err) {
-      console.log(err);
-      alert("❌ Upload failed");
+      if (isLogin) {
+        const t = res.data.token || res.data;
+        setToken(t);
+        localStorage.setItem("token", t);
+        localStorage.setItem("username", username);
+      } else {
+        alert("Registered! Login now");
+        setIsLogin(true);
+      }
+    } catch (e) {
+      alert("❌ " + e.message);
     }
   };
 
   // =========================
-  // ❓ ASK QUESTION
+  // 💬 SEND MESSAGE (FIXED)
   // =========================
-  const askQuestion = async () => {
+  const sendMessage = async () => {
+
     if (!question.trim()) return;
 
     if (!selectedDocId) {
@@ -89,133 +89,179 @@ function App() {
       return;
     }
 
+    const q = question;
+    setQuestion("");
+
+    setMessages((prev) => [...prev, { role: "user", text: q }]);
+    setLoading(true);
+
     try {
-      setChat((prev) => [...prev, "Q: " + question]);
+      const res = await api.post("/chat/ask", null, {
+        params: {
+          question: q,
+          username,
+          documentId: selectedDocId,
+        },
+      });
 
-      const res = await axios.post(
-        `${BASE_URL}/api/chat/ask`,
-        null,
-        {
-          params: {
-            question,
-            username,
-            documentId: selectedDocId,
-          },
-        }
-      );
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: res.data },
+      ]);
 
-      setChat((prev) => [...prev, "A: " + res.data]);
-
-      setQuestion("");
     } catch (err) {
-      console.log(err);
-      alert("❌ Error asking question");
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "❌ Error" },
+      ]);
     }
+
+    setLoading(false);
+  };
+
+  // =========================
+  // 📤 UPLOAD
+  // =========================
+  const uploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", username);
+
+    try {
+      setUploading(true);
+
+      await api.post("/documents/upload", formData);
+
+      alert("✅ Uploaded");
+      fetchDocuments();
+
+    } catch {
+      alert("❌ Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // =========================
+  // ❌ DELETE DOC
+  // =========================
+  const deleteDoc = async (id) => {
+    await api.delete(`/documents/delete/${id}`);
+    fetchDocuments();
   };
 
   // =========================
   // 🧹 CLEAR CHAT
   // =========================
-  const clearChat = async () => {
-    await axios.delete(
-      `${BASE_URL}/api/chat/clear?username=${username}`
-    );
-    setChat([]);
+  const clearChat = () => {
+    setMessages([]);
   };
 
   // =========================
-  // 🎨 UI
+  // 🚪 LOGOUT
+  // =========================
+  const logout = () => {
+    localStorage.clear();
+    setToken("");
+  };
+
+  // =========================
+  // 🔐 LOGIN UI
+  // =========================
+  if (!token) {
+    return (
+      <div className="flex h-screen">
+        <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-3xl">
+          DocuMind AI
+        </div>
+
+        <div className="w-1/2 flex items-center justify-center">
+          <div>
+            <input placeholder="Username" onChange={(e) => setUsername(e.target.value)} />
+            <input type="password" placeholder="Password" onChange={(e) => setPassword(e.target.value)} />
+
+            <button onClick={handleAuth}>
+              {isLogin ? "Login" : "Register"}
+            </button>
+
+            <p onClick={() => setIsLogin(!isLogin)}>Switch</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================
+  // 💬 MAIN UI
   // =========================
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="flex h-screen bg-gray-900 text-white">
 
-      {/* LEFT PANEL */}
-      <div style={{
-        width: "25%",
-        background: "#000",
-        color: "#fff",
-        padding: "15px"
-      }}>
+      {/* LEFT */}
+      <div className="w-64 bg-black p-4 flex flex-col">
 
-        <h3>📄 Upload</h3>
-
-        <input
-          type="file"
-          onChange={(e) => setFile(e.target.files[0])}
-        />
-
-        <button onClick={uploadFile} style={{ marginTop: "10px" }}>
-          Upload
+        <button onClick={clearChat} className="bg-blue-600 p-2 mb-3">
+          New Chat
         </button>
 
-        <hr />
+        <input type="file" onChange={uploadFile} />
+        {uploading && <p>Uploading...</p>}
 
-        <h3>📂 Documents</h3>
-
+        {/* SELECT DOC */}
         <select
           onChange={(e) => setSelectedDocId(e.target.value)}
-          style={{ width: "100%", marginBottom: "10px" }}
+          className="text-black mt-2"
         >
-          <option value="">Select Document</option>
-          {documents.map((doc) => (
-            <option key={doc.id} value={doc.id}>
-              {doc.fileName}
+          <option>Select Document</option>
+          {documents.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.fileName}
             </option>
           ))}
         </select>
 
-        <ul>
-          {documents.map((doc) => (
-            <li key={doc.id}>{doc.fileName}</li>
-          ))}
-        </ul>
-
-      </div>
-
-      {/* RIGHT PANEL */}
-      <div style={{
-        width: "75%",
-        background: "#0b1a2b",
-        color: "#fff",
-        padding: "20px"
-      }}>
-
-        <h2>💬 DocuMind AI</h2>
-
-        {/* CHAT */}
-        <div style={{
-          height: "70%",
-          overflowY: "scroll",
-          border: "1px solid gray",
-          padding: "10px",
-          marginBottom: "10px"
-        }}>
-          {chat.map((msg, i) => (
-            <p key={i}>{msg}</p>
+        <div className="mt-4">
+          {documents.map((d) => (
+            <div key={d.id} className="flex justify-between">
+              <span>{d.fileName}</span>
+              <button onClick={() => deleteDoc(d.id)}>❌</button>
+            </div>
           ))}
         </div>
 
-        {/* INPUT */}
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask question..."
-          style={{ width: "80%", padding: "10px" }}
-        />
-
-        <button onClick={askQuestion} style={{ padding: "10px" }}>
-          Send
+        <button onClick={logout} className="mt-auto bg-red-600 p-2">
+          Logout
         </button>
 
-        <br /><br />
+      </div>
 
-        <button onClick={clearChat}>
-          Clear Chat
-        </button>
+      {/* RIGHT */}
+      <div className="flex-1 flex flex-col">
+
+        <div className="flex-1 p-4 overflow-y-auto">
+          {messages.map((m, i) => (
+            <div key={i} className={m.role === "user" ? "text-right" : ""}>
+              {m.text}
+            </div>
+          ))}
+          {loading && <p>Thinking...</p>}
+        </div>
+
+        <div className="p-3 flex">
+          <textarea
+            className="flex-1 text-black"
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+          />
+          <button onClick={sendMessage} className="bg-blue-600 px-4">
+            Send
+          </button>
+        </div>
 
       </div>
     </div>
   );
 }
-
-export default App;
