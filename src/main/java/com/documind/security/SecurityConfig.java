@@ -2,6 +2,7 @@ package com.documind.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -13,13 +14,23 @@ public class SecurityConfig {
 
         http
             .csrf(csrf -> csrf.disable())
+
+            // ✅ ENABLE CORS
+            .cors(cors -> {})
+
             .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(
-                            "/api/auth/**",
-                            "/api/documents/**",
-                            "/api/chat/**"
-                    ).permitAll()
-                    .anyRequest().authenticated()
+
+                // ✅ VERY IMPORTANT (fixes 403 preflight)
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // ✅ your APIs
+                .requestMatchers(
+                        "/api/auth/**",
+                        "/api/documents/**",
+                        "/api/chat/**"
+                ).permitAll()
+
+                .anyRequest().authenticated()
             );
 
         return http.build();
