@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { login, register, askQuestion, uploadFile, getDocuments } from "./api";
+import { login, register, askQuestion, uploadFile, getDocuments } from "./api/api";
 
 function App() {
   const [username, setUsername] = useState("");
