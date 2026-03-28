@@ -47,10 +47,9 @@ public class DocumentService {
             boolean exists = documentRepository
                     .existsByFileNameAndUserUsername(fileName, username);
 
-            if (exists) {
-                System.out.println("⚠ File already exists. Skipping upload.");
-                return;
-            }
+          if (exists) {
+    System.out.println("⚠ File already exists. Reprocessing...");
+}
 
             // ✅ SAVE DOCUMENT
             Document doc = new Document();
