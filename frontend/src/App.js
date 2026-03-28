@@ -10,6 +10,17 @@ const api = axios.create({
   baseURL: BASE_URL,
 });
 
+// ✅ 🔥 ADD THIS (MOST IMPORTANT FIX)
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
 // ✅ AUTO LOGOUT ON 401
 api.interceptors.response.use(
   (res) => res,
@@ -46,7 +57,7 @@ export default function App() {
   const textareaRef = useRef(null);
 
   // =========================
-  // 🔄 SESSION AUTO CLEAR (1hr)
+  // 🔄 AUTO LOGOUT (1hr)
   // =========================
   useEffect(() => {
     const loginTime = localStorage.getItem("loginTime");
@@ -61,7 +72,7 @@ export default function App() {
   }, []);
 
   // =========================
-  // 📂 FETCH DOCUMENTS (FIXED)
+  // 📂 FETCH DOCUMENTS
   // =========================
   const fetchDocuments = async () => {
     try {
@@ -119,7 +130,7 @@ export default function App() {
   };
 
   // =========================
-  // 💬 SEND MESSAGE (FIXED)
+  // 💬 CHAT
   // =========================
   const sendMessage = async () => {
 
@@ -156,7 +167,7 @@ export default function App() {
   };
 
   // =========================
-  // 📤 UPLOAD (FIXED 403 + 500)
+  // 📤 UPLOAD
   // =========================
   const uploadFile = async (e) => {
 
@@ -239,7 +250,7 @@ export default function App() {
   }
 
   // =========================
-  // 💬 CHAT UI
+  // 💬 MAIN UI
   // =========================
   return (
     <div className="flex h-screen bg-gray-900 text-white">
