@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
 const BASE_URL =
@@ -7,7 +7,7 @@ const BASE_URL =
 
 const api = axios.create({
   baseURL: BASE_URL,
-   withCredentials: true,
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
@@ -32,8 +32,17 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  const chatEndRef = useRef(null);
+
+  // ================= AUTO SCROLL =================
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   // ================= FETCH DOCS =================
   const fetchDocuments = async () => {
+    if (!username || username.trim() === "") return;
+
     try {
       const res = await api.get("/documents/history", {
         params: { username },
@@ -70,7 +79,6 @@ export default function App() {
 
   // ================= CHAT =================
   const sendMessage = async () => {
-
     if (!question.trim()) return;
 
     if (!selectedDocId) {
@@ -81,7 +89,7 @@ export default function App() {
     const q = question;
     setQuestion("");
 
-    setMessages(prev => [...prev, { role: "user", text: q }]);
+    setMessages((prev) => [...prev, { role: "user", text: q }]);
     setLoading(true);
 
     try {
@@ -93,19 +101,27 @@ export default function App() {
         },
       });
 
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         { role: "ai", text: res.data },
       ]);
 
     } catch {
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "Error" },
+        { role: "ai", text: "❌ Error" },
       ]);
     }
 
     setLoading(false);
+  };
+
+  // ================= ENTER KEY =================
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
   // ================= UPLOAD =================
@@ -130,8 +146,12 @@ export default function App() {
 
   // ================= DELETE =================
   const deleteDoc = async (id) => {
-    await api.delete(`/documents/delete/${id}`);
-    fetchDocuments();
+    try {
+      await api.delete(`/documents/delete/${id}`);
+      fetchDocuments();
+    } catch {
+      alert("Delete failed");
+    }
   };
 
   // ================= CLEAR CHAT =================
@@ -141,6 +161,8 @@ export default function App() {
   const logout = () => {
     localStorage.clear();
     setToken("");
+    setMessages([]);
+    setDocuments([]);
   };
 
   // ================= LOGIN UI =================
@@ -148,12 +170,10 @@ export default function App() {
     return (
       <div className="flex h-screen">
 
-        {/* LEFT */}
         <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-4xl font-bold">
           DocuMind AI
         </div>
 
-        {/* RIGHT */}
         <div className="w-1/2 flex items-center justify-center bg-gray-100">
           <div className="bg-white p-8 rounded-xl shadow-lg w-80">
 
@@ -178,7 +198,7 @@ export default function App() {
 
             <button
               onClick={handleAuth}
-              className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+              className="w-full bg-blue-600 text-white p-2 rounded"
             >
               {isLogin ? "Login" : "Register"}
             </button>
@@ -203,17 +223,13 @@ export default function App() {
       {/* SIDEBAR */}
       <div className="w-64 bg-black p-4 flex flex-col">
 
-        <button
-          onClick={clearChat}
-          className="bg-blue-600 p-2 rounded mb-3"
-        >
+        <button onClick={clearChat} className="bg-blue-600 p-2 rounded mb-3">
           New Chat
         </button>
 
         <input type="file" onChange={uploadFile} />
         {uploading && <p className="text-sm mt-2">Uploading...</p>}
 
-        {/* SELECT DOC */}
         <select
           className="text-black mt-3 p-1 rounded"
           onChange={(e) => setSelectedDocId(e.target.value)}
@@ -226,7 +242,6 @@ export default function App() {
           ))}
         </select>
 
-        {/* DOC LIST */}
         <div className="mt-4 space-y-2">
           {documents.map((d) => (
             <div key={d.id} className="flex justify-between text-sm">
@@ -236,10 +251,7 @@ export default function App() {
           ))}
         </div>
 
-        <button
-          onClick={logout}
-          className="mt-auto bg-red-600 p-2 rounded"
-        >
+        <button onClick={logout} className="mt-auto bg-red-600 p-2 rounded">
           Logout
         </button>
 
@@ -264,23 +276,30 @@ export default function App() {
           ))}
 
           {loading && <p>Thinking...</p>}
+
+          <div ref={chatEndRef}></div>
         </div>
 
         {/* INPUT */}
         <div className="p-3 flex gap-2">
 
           <textarea
-            className="flex-1 p-2 text-black rounded"
+            className="flex-1 p-2 text-black rounded resize-none"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ask something..."
+            onKeyDown={handleKeyDown}
+            placeholder="Ask something... (Enter to send)"
+            rows={2}
           />
 
           <button
             onClick={sendMessage}
-            className="bg-blue-600 px-6 rounded"
+            disabled={loading}
+            className={`px-6 rounded ${
+              loading ? "bg-gray-500" : "bg-blue-600"
+            }`}
           >
-            Send
+            {loading ? "..." : "Send"}
           </button>
 
         </div>
