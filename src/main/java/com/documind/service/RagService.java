@@ -28,13 +28,8 @@ public class RagService {
     public String ask(String question, Long documentId) {
 
         try {
-            System.out.println("🔥 ===== RAG STARTED =====");
-            System.out.println("❓ Question: " + question);
-
-            // ================= 1. EMBEDDING =================
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // ================= 2. FETCH =================
             List<DocumentEmbedding> embeddings =
                     embeddingRepository.findByDocumentId(documentId);
 
@@ -42,7 +37,6 @@ public class RagService {
                 return "Not found in document";
             }
 
-            // ================= 3. SCORE =================
             List<ScoredChunk> scored = embeddings.stream()
                     .map(e -> new ScoredChunk(
                             e.getChunkText(),
@@ -52,9 +46,7 @@ public class RagService {
                     .collect(Collectors.toList());
 
             float maxScore = scored.get(0).score;
-            System.out.println("🔥 Max Score: " + maxScore);
 
-            // ================= 4. STRICT FILTER =================
             float threshold = Math.max(0.7f, maxScore - 0.05f);
 
             List<String> topChunks = scored.stream()
@@ -63,37 +55,23 @@ public class RagService {
                     .map(c -> c.text)
                     .collect(Collectors.toList());
 
-            System.out.println("🔥 Threshold: " + threshold);
-
             if (topChunks.isEmpty()) {
                 return "Not found in document";
             }
 
-            // ================= 5. CLEAN CONTEXT =================
             String context = topChunks.stream()
-                    .map(String::trim)
-                    .filter(s -> s.length() > 20) // remove garbage
+                    .filter(s -> s.length() > 20)
                     .collect(Collectors.joining("\n\n"));
 
-            System.out.println("📄 Context:\n" + context);
-
-            // ================= 6. STRICT PROMPT =================
             String prompt =
-                    "You are a strict AI.\n\n" +
-                    "RULES:\n" +
-                    "1. Answer ONLY from context.\n" +
-                    "2. If context is not related, reply EXACTLY: Not found in document.\n" +
-                    "3. Do NOT guess.\n\n" +
-                    "CONTEXT:\n" + context +
-                    "\n\nQUESTION:\n" + question +
-                    "\n\nANSWER:";
+                    "Answer ONLY from context.\n" +
+                    "If not present → reply: Not found in document.\n\n" +
+                    "Context:\n" + context +
+                    "\n\nQuestion:\n" + question;
 
             String answer = chatModel.generate(prompt);
 
-            // ================= 7. FINAL CHECK =================
-            if (answer == null ||
-                answer.toLowerCase().contains("not related") ||
-                answer.trim().isEmpty()) {
+            if (answer == null || answer.trim().isEmpty()) {
                 return "Not found in document";
             }
 
@@ -101,13 +79,11 @@ public class RagService {
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Error";
+            return "Error";
         }
     }
 
-    // ================= COSINE =================
     private float cosineSimilarity(float[] a, float[] b) {
-
         float dot = 0, normA = 0, normB = 0;
 
         for (int i = 0; i < a.length; i++) {
@@ -121,9 +97,7 @@ public class RagService {
         return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
-    // ================= STRING → VECTOR =================
     private float[] stringToVector(String str) {
-
         str = str.replace("[", "").replace("]", "");
         String[] parts = str.split(",");
 
@@ -136,7 +110,6 @@ public class RagService {
         return vector;
     }
 
-    // ================= HELPER =================
     static class ScoredChunk {
         String text;
         float score;
