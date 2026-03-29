@@ -38,61 +38,55 @@ public class DocumentService {
     }
 
     @Transactional
-    public void saveDocumentMetadata(MultipartFile file, String username) {
+   public void saveDocumentMetadata(MultipartFile file, String username) {
 
-        try {
-            String fileName = file.getOriginalFilename();
+    try {
+        String fileName = file.getOriginalFilename();
 
-            boolean exists = documentRepository
-                    .existsByFileNameAndUserUsername(fileName, username);
+        // ✅ CHECK DUPLICATE
+        boolean exists = documentRepository
+                .existsByFileNameAndUserUsername(fileName, username);
 
-            if (exists) return;
-
-            Document doc = new Document();
-            doc.setFileName(fileName);
-            doc.setFileSize(file.getSize());
-            doc.setUserUsername(username);
-            doc.setUploadedAt(LocalDateTime.now());
-
-            Document savedDoc = documentRepository.save(doc);
-
-            String content = extractText(file);
-            content = cleanText(content);
-
-            String[] chunks = content.split("\\. ");
-
-            int MAX_CHUNKS = 20;
-
-            List<DocumentEmbedding> list = new ArrayList<>();
-
-            for (int i = 0; i < Math.min(chunks.length, MAX_CHUNKS); i++) {
-
-                String chunk = cleanText(chunks[i]);
-                if (chunk.isEmpty()) continue;
-
-                float[] vector;
-                try {
-                    vector = embeddingService.embed(chunk).vector();
-                } catch (Exception e) {
-                    continue;
-                }
-
-                DocumentEmbedding de = new DocumentEmbedding();
-                de.setChunkText(chunk);
-                de.setEmbedding(convertToVectorString(vector));
-                de.setDocumentId(savedDoc.getId());
-
-                list.add(de);
-            }
-
-            embeddingRepository.saveAll(list);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Upload failed");
+        if (exists) {
+            System.out.println("⚠ File already exists. Skipping embeddings.");
+            return;
         }
-    }
 
+        // ✅ SAVE DOCUMENT
+        Document doc = new Document();
+        doc.setFileName(fileName);
+        doc.setFileSize(file.getSize());
+        doc.setUserUsername(username);
+        doc.setUploadedAt(LocalDateTime.now());
+
+        Document savedDoc = documentRepository.save(doc);
+
+        // ✅ READ CONTENT
+        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+
+        String[] chunks = content.split("\\. ");
+
+        for (String chunk : chunks) {
+
+            if (chunk.trim().isEmpty()) continue;
+
+            float[] vector = embeddingService.embed(chunk).vector();
+
+            DocumentEmbedding de = new DocumentEmbedding();
+            de.setChunkText(chunk);
+            de.setEmbedding(convertToVectorString(vector));
+            de.setDocumentId(savedDoc.getId());
+
+            embeddingRepository.save(de);
+        }
+
+        System.out.println("✅ Embeddings saved");
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        throw new RuntimeException("Upload failed");
+    }
+}
     private String extractText(MultipartFile file) throws Exception {
 
         String fileName = file.getOriginalFilename().toLowerCase();
