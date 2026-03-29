@@ -6,6 +6,7 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class RagService {
@@ -24,98 +25,64 @@ public class RagService {
         this.chatModel = chatModel;
     }
 
-    // =========================
-    // 🔥 STRICT RAG METHOD
-    // =========================
-    public String ask(String question, String username, Long documentId) {
+    public String ask(String question, Long documentId) {
 
         try {
             System.out.println("🔥 ===== RAG STARTED =====");
             System.out.println("❓ Question: " + question);
-            System.out.println("📄 Document ID: " + documentId);
 
-            // =========================
-            // ✅ 1. EMBEDDING
-            // =========================
+            // ================= 1. QUERY EMBEDDING =================
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // =========================
-            // ✅ 2. FETCH ONLY THIS DOC
-            // =========================
+            // ================= 2. FETCH EMBEDDINGS =================
             List<DocumentEmbedding> embeddings =
                     embeddingRepository.findByDocumentId(documentId);
 
             System.out.println("📊 Embeddings: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
-                return "❌ No embeddings found for this document";
+                return "Not found in document";
             }
 
-            // =========================
-            // ✅ 3. SIMILARITY + FILTER
-            // =========================
-            List<String> topChunks = embeddings.stream()
-                    .map(e -> {
-                        float score = cosineSimilarity(
-                                queryVector,
-                                stringToVector(e.getEmbedding())
-                        );
-                        return new Object[]{e.getChunkText(), score};
-                    })
-
-                    // 🔥 STRICT FILTER
-                    .filter(arr -> (float) arr[1] > 0.75)
-
-                    // 🔥 SORT BEST FIRST
-                    .sorted((a, b) -> Float.compare(
-                            (float) b[1],
-                            (float) a[1]
+            // ================= 3. CALCULATE SIMILARITY =================
+            List<ScoredChunk> scoredChunks = embeddings.stream()
+                    .map(e -> new ScoredChunk(
+                            e.getChunkText(),
+                            cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
                     ))
+                    .sorted((a, b) -> Float.compare(b.score, a.score))
+                    .collect(Collectors.toList());
 
+            // ================= 4. FILTER STRICT =================
+            List<String> topChunks = scoredChunks.stream()
+                    .filter(c -> c.score > 0.75) // 🔥 STRICT THRESHOLD
                     .limit(3)
-                    .map(arr -> (String) arr[0])
-                    .toList();
+                    .map(c -> c.text)
+                    .collect(Collectors.toList());
 
-            // =========================
-            // 🚨 STOP IF NO MATCH
-            // =========================
             if (topChunks.isEmpty()) {
                 return "Not found in document";
             }
 
-            // =========================
-            // ✅ 4. CONTEXT
-            // =========================
-            StringBuilder context = new StringBuilder();
-            for (String chunk : topChunks) {
-                context.append(chunk).append("\n\n");
-            }
+            // ================= 5. BUILD CONTEXT =================
+            String context = String.join("\n\n", topChunks);
 
-            // =========================
-            // 🔥 5. STRICT PROMPT
-            // =========================
+            System.out.println("📄 Context used:\n" + context);
+
+            // ================= 6. STRICT PROMPT =================
             String prompt =
                     "You are DocuMind AI.\n\n" +
-
                     "STRICT RULES:\n" +
-                    "1. Answer ONLY from the given context.\n" +
+                    "1. Answer ONLY using the given context.\n" +
                     "2. DO NOT use outside knowledge.\n" +
-                    "3. DO NOT guess.\n" +
-                    "4. If answer is not present, reply EXACTLY:\n" +
-                    "   Not found in document\n\n" +
-
+                    "3. If answer is not in context, reply EXACTLY: Not found in document.\n\n" +
                     "CONTEXT:\n" + context +
-                    "\nQUESTION:\n" + question +
-                    "\nANSWER:";
+                    "\n\nQUESTION:\n" + question +
+                    "\n\nANSWER:";
 
-            // =========================
-            // ✅ 6. GENERATE
-            // =========================
             String answer = chatModel.generate(prompt);
 
-            // =========================
-            // 🚨 FINAL SAFETY CHECK
-            // =========================
+            // ================= 7. FINAL SAFETY CHECK =================
             if (answer == null || answer.trim().isEmpty()) {
                 return "Not found in document";
             }
@@ -128,9 +95,7 @@ public class RagService {
         }
     }
 
-    // =========================
-    // 🔢 COSINE SIMILARITY
-    // =========================
+    // ================= COSINE =================
     private float cosineSimilarity(float[] a, float[] b) {
 
         int length = Math.min(a.length, b.length);
@@ -148,9 +113,7 @@ public class RagService {
         return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
-    // =========================
-    // 🔄 STRING → VECTOR
-    // =========================
+    // ================= STRING → VECTOR =================
     private float[] stringToVector(String str) {
 
         str = str.replace("[", "").replace("]", "");
@@ -163,5 +126,16 @@ public class RagService {
         }
 
         return vector;
+    }
+
+    // ================= HELPER CLASS =================
+    static class ScoredChunk {
+        String text;
+        float score;
+
+        ScoredChunk(String text, float score) {
+            this.text = text;
+            this.score = score;
+        }
     }
 }
