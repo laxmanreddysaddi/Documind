@@ -5,7 +5,7 @@ import com.documind.repository.DocumentEmbeddingRepository;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,21 +31,19 @@ public class RagService {
             System.out.println("🔥 ===== RAG STARTED =====");
             System.out.println("❓ Question: " + question);
 
-            // ========= 1. EMBED QUESTION =========
+            // ================= 1. EMBEDDING =================
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // ========= 2. FETCH DOCUMENT CHUNKS =========
+            // ================= 2. FETCH =================
             List<DocumentEmbedding> embeddings =
                     embeddingRepository.findByDocumentId(documentId);
-
-            System.out.println("📊 Embeddings: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
                 return "Not found in document";
             }
 
-            // ========= 3. SCORE CHUNKS =========
-            List<ScoredChunk> scoredChunks = embeddings.stream()
+            // ================= 3. SCORE =================
+            List<ScoredChunk> scored = embeddings.stream()
                     .map(e -> new ScoredChunk(
                             e.getChunkText(),
                             cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
@@ -53,73 +51,66 @@ public class RagService {
                     .sorted((a, b) -> Float.compare(b.score, a.score))
                     .collect(Collectors.toList());
 
-            // ========= 4. DYNAMIC THRESHOLD =========
-            float maxScore = scoredChunks.get(0).score;
-            float threshold = Math.max(0.60f, maxScore - 0.10f);
-
+            float maxScore = scored.get(0).score;
             System.out.println("🔥 Max Score: " + maxScore);
-            System.out.println("🔥 Threshold: " + threshold);
 
-            List<String> topChunks = scoredChunks.stream()
+            // ================= 4. STRICT FILTER =================
+            float threshold = Math.max(0.7f, maxScore - 0.05f);
+
+            List<String> topChunks = scored.stream()
                     .filter(c -> c.score >= threshold)
                     .limit(3)
                     .map(c -> c.text)
                     .collect(Collectors.toList());
 
+            System.out.println("🔥 Threshold: " + threshold);
+
             if (topChunks.isEmpty()) {
                 return "Not found in document";
             }
 
-            // ========= 5. BUILD CONTEXT =========
-            String context = String.join("\n\n", topChunks);
+            // ================= 5. CLEAN CONTEXT =================
+            String context = topChunks.stream()
+                    .map(String::trim)
+                    .filter(s -> s.length() > 20) // remove garbage
+                    .collect(Collectors.joining("\n\n"));
 
             System.out.println("📄 Context:\n" + context);
 
-            // ========= 6. ULTRA STRICT PROMPT =========
+            // ================= 6. STRICT PROMPT =================
             String prompt =
-                    "You are a STRICT document question-answering system.\n\n" +
-
+                    "You are a strict AI.\n\n" +
                     "RULES:\n" +
-                    "1. Answer ONLY using the provided context.\n" +
-                    "2. DO NOT use any outside knowledge.\n" +
-                    "3. DO NOT guess or assume anything.\n" +
-                    "4. If answer is not clearly present, reply EXACTLY: Not found in document\n" +
-                    "5. Keep answer short and precise.\n\n" +
-
+                    "1. Answer ONLY from context.\n" +
+                    "2. If context is not related, reply EXACTLY: Not found in document.\n" +
+                    "3. Do NOT guess.\n\n" +
                     "CONTEXT:\n" + context +
-
                     "\n\nQUESTION:\n" + question +
-
-                    "\n\nFINAL ANSWER:";
+                    "\n\nANSWER:";
 
             String answer = chatModel.generate(prompt);
 
-            // ========= 7. FINAL SAFETY =========
-            if (answer == null || answer.trim().isEmpty()) {
+            // ================= 7. FINAL CHECK =================
+            if (answer == null ||
+                answer.toLowerCase().contains("not related") ||
+                answer.trim().isEmpty()) {
                 return "Not found in document";
             }
 
-            // 🔥 HARD FILTER (ANTI-HALLUCINATION)
-            if (!context.toLowerCase().contains(answer.toLowerCase().substring(0, Math.min(20, answer.length())))) {
-                return "Not found in document";
-            }
-
-            return answer.trim();
+            return answer;
 
         } catch (Exception e) {
             e.printStackTrace();
-            return "❌ Error in RAG";
+            return "❌ Error";
         }
     }
 
-    // ========= COSINE SIMILARITY =========
+    // ================= COSINE =================
     private float cosineSimilarity(float[] a, float[] b) {
-
-        int length = Math.min(a.length, b.length);
 
         float dot = 0, normA = 0, normB = 0;
 
-        for (int i = 0; i < length; i++) {
+        for (int i = 0; i < a.length; i++) {
             dot += a[i] * b[i];
             normA += a[i] * a[i];
             normB += b[i] * b[i];
@@ -130,7 +121,7 @@ public class RagService {
         return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
-    // ========= STRING → VECTOR =========
+    // ================= STRING → VECTOR =================
     private float[] stringToVector(String str) {
 
         str = str.replace("[", "").replace("]", "");
@@ -145,7 +136,7 @@ public class RagService {
         return vector;
     }
 
-    // ========= HELPER =========
+    // ================= HELPER =================
     static class ScoredChunk {
         String text;
         float score;
