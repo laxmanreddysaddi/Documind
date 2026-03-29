@@ -30,25 +30,26 @@ public class SecurityConfig {
     }
 
     // 🔥 GLOBAL CORS CONFIG (IMPORTANT)
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+   @Bean
+public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration config = new CorsConfiguration();
+    CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of(
-            "https://documind-n5mcm45yl-laxmanreddysaddis-projects.vercel.app",
-            "https://documind-git-main-laxmanreddysaddis-projects.vercel.app"
-        ));
+    // 🔥 ALLOW LOCAL + VERCEL
+    config.setAllowedOriginPatterns(List.of(
+        "http://localhost:*",
+        "https://*.vercel.app"
+    ));
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(List.of("*"));
+    config.setAllowCredentials(true);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
+    UrlBasedCorsConfigurationSource source =
+            new UrlBasedCorsConfigurationSource();
 
-        source.registerCorsConfiguration("/**", config);
+    source.registerCorsConfiguration("/**", config);
 
-        return source;
-    }
+    return source;
+}
 }
