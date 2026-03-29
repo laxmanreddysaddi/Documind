@@ -24,54 +24,103 @@ public class RagService {
         this.chatModel = chatModel;
     }
 
-    public String ask(String question, Long documentId) {
+    // =========================
+    // 🔥 STRICT RAG METHOD
+    // =========================
+    public String ask(String question, String username, Long documentId) {
 
         try {
             System.out.println("🔥 ===== RAG STARTED =====");
             System.out.println("❓ Question: " + question);
             System.out.println("📄 Document ID: " + documentId);
 
+            // =========================
+            // ✅ 1. EMBEDDING
+            // =========================
             float[] queryVector = embeddingService.embed(question).vector();
 
-            // ✅ ONLY selected doc
+            // =========================
+            // ✅ 2. FETCH ONLY THIS DOC
+            // =========================
             List<DocumentEmbedding> embeddings =
                     embeddingRepository.findByDocumentId(documentId);
 
             System.out.println("📊 Embeddings: " + embeddings.size());
 
             if (embeddings.isEmpty()) {
-                return "❌ No embeddings found";
+                return "❌ No embeddings found for this document";
             }
 
+            // =========================
+            // ✅ 3. SIMILARITY + FILTER
+            // =========================
             List<String> topChunks = embeddings.stream()
-                    .map(e -> new Object[]{
-                            e.getChunkText(),
-                            cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
+                    .map(e -> {
+                        float score = cosineSimilarity(
+                                queryVector,
+                                stringToVector(e.getEmbedding())
+                        );
+                        return new Object[]{e.getChunkText(), score};
                     })
-                    .filter(e -> (float)e[1] > 0.5) // 🔥 STRICT FILTER
-                    .sorted((a, b) -> Float.compare((float)b[1], (float)a[1]))
+
+                    // 🔥 STRICT FILTER
+                    .filter(arr -> (float) arr[1] > 0.75)
+
+                    // 🔥 SORT BEST FIRST
+                    .sorted((a, b) -> Float.compare(
+                            (float) b[1],
+                            (float) a[1]
+                    ))
+
                     .limit(3)
-                    .map(e -> (String)e[0])
+                    .map(arr -> (String) arr[0])
                     .toList();
 
+            // =========================
+            // 🚨 STOP IF NO MATCH
+            // =========================
             if (topChunks.isEmpty()) {
                 return "Not found in document";
             }
 
+            // =========================
+            // ✅ 4. CONTEXT
+            // =========================
             StringBuilder context = new StringBuilder();
             for (String chunk : topChunks) {
                 context.append(chunk).append("\n\n");
             }
 
+            // =========================
+            // 🔥 5. STRICT PROMPT
+            // =========================
             String prompt =
-                    "You are a strict document QA system.\n" +
-                    "Answer ONLY from context.\n" +
-                    "If not found say: Not found in document.\n\n" +
-                    "Context:\n" + context +
-                    "\nQuestion:\n" + question +
-                    "\nAnswer:";
+                    "You are DocuMind AI.\n\n" +
 
-            return chatModel.generate(prompt);
+                    "STRICT RULES:\n" +
+                    "1. Answer ONLY from the given context.\n" +
+                    "2. DO NOT use outside knowledge.\n" +
+                    "3. DO NOT guess.\n" +
+                    "4. If answer is not present, reply EXACTLY:\n" +
+                    "   Not found in document\n\n" +
+
+                    "CONTEXT:\n" + context +
+                    "\nQUESTION:\n" + question +
+                    "\nANSWER:";
+
+            // =========================
+            // ✅ 6. GENERATE
+            // =========================
+            String answer = chatModel.generate(prompt);
+
+            // =========================
+            // 🚨 FINAL SAFETY CHECK
+            // =========================
+            if (answer == null || answer.trim().isEmpty()) {
+                return "Not found in document";
+            }
+
+            return answer;
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -79,12 +128,16 @@ public class RagService {
         }
     }
 
+    // =========================
+    // 🔢 COSINE SIMILARITY
+    // =========================
     private float cosineSimilarity(float[] a, float[] b) {
-        int len = Math.min(a.length, b.length);
+
+        int length = Math.min(a.length, b.length);
 
         float dot = 0, normA = 0, normB = 0;
 
-        for (int i = 0; i < len; i++) {
+        for (int i = 0; i < length; i++) {
             dot += a[i] * b[i];
             normA += a[i] * a[i];
             normB += b[i] * b[i];
@@ -95,11 +148,16 @@ public class RagService {
         return (float) (dot / (Math.sqrt(normA) * Math.sqrt(normB)));
     }
 
+    // =========================
+    // 🔄 STRING → VECTOR
+    // =========================
     private float[] stringToVector(String str) {
+
         str = str.replace("[", "").replace("]", "");
         String[] parts = str.split(",");
 
         float[] vector = new float[parts.length];
+
         for (int i = 0; i < parts.length; i++) {
             vector[i] = Float.parseFloat(parts[i]);
         }

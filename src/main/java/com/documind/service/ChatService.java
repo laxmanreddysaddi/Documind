@@ -16,13 +16,21 @@ public class ChatService {
         this.ragService = ragService;
     }
 
-    // ✅ UPDATED METHOD (IMPORTANT)
+    // =========================
+    // ✅ ASK QUESTION (FIXED)
+    // =========================
     public String ask(String question, String username, Long documentId) {
 
-        // 🔥 Call RAG with documentId
-        String answer = ragService.ask(question, documentId);
+        if (documentId == null) {
+            return "⚠ Please select a document";
+        }
 
-        // ✅ Save chat history per user
+        // ✅ FIXED CALL
+        String answer = ragService.ask(question, username, documentId);
+
+        // =========================
+        // 💾 SAVE CHAT PER USER
+        // =========================
         chatHistory.putIfAbsent(username, new ArrayList<>());
 
         chatHistory.get(username).add("Q: " + question);
@@ -31,12 +39,16 @@ public class ChatService {
         return answer;
     }
 
-    // ✅ Get chat history
+    // =========================
+    // 📜 GET CHAT HISTORY
+    // =========================
     public List<String> getChatHistory(String username) {
         return chatHistory.getOrDefault(username, new ArrayList<>());
     }
 
-    // ✅ Clear chat history (NEW FEATURE)
+    // =========================
+    // 🧹 CLEAR CHAT
+    // =========================
     public void clearChat(String username) {
         chatHistory.remove(username);
     }
