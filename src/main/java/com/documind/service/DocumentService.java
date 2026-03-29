@@ -92,40 +92,46 @@ public class DocumentService {
 
             // ================= CHUNKING =================
             String[] chunks = content.split("\\. ");
+            // ================= CHUNKING (FIXED - SMART) =================
+int chunkSize = 500; // 🔥 BEST SIZE
+int overlap = 100;   // 🔥 CONTEXT PRESERVATION
 
-            int success = 0;
-            int failed = 0;
+int success = 0;
+int failed = 0;
 
-            for (String chunk : chunks) {
+for (int i = 0; i < content.length(); i += (chunkSize - overlap)) {
 
-                if (chunk == null || chunk.trim().length() < 30) continue;
+    int end = Math.min(content.length(), i + chunkSize);
+    String chunk = content.substring(i, end).trim();
 
-                try {
+    // ❌ Skip very small chunks
+    if (chunk.length() < 50) continue;
 
-                    // 🔥 EMBEDDING (SAFE)
-                    float[] vector = embeddingService.embed(chunk).vector();
+    try {
 
-                    if (vector == null || vector.length == 0) {
-                        failed++;
-                        continue;
-                    }
+        float[] vector = embeddingService.embed(chunk).vector();
 
-                    DocumentEmbedding de = new DocumentEmbedding();
-                    de.setChunkText(chunk);
-                    de.setEmbedding(convertToVectorString(vector));
-                    de.setDocumentId(savedDoc.getId());
+        if (vector == null || vector.length == 0) {
+            failed++;
+            continue;
+        }
 
-                    embeddingRepository.save(de);
-                    success++;
+        DocumentEmbedding de = new DocumentEmbedding();
+        de.setChunkText(chunk);
+        de.setEmbedding(convertToVectorString(vector));
+        de.setDocumentId(savedDoc.getId());
 
-                } catch (Exception e) {
-                    failed++;
-                    System.out.println("⚠ Skipped chunk (embedding failed)");
-                }
-            }
+        embeddingRepository.save(de);
+        success++;
 
-            System.out.println("✅ Embeddings saved: " + success);
-            System.out.println("⚠ Failed chunks: " + failed);
+    } catch (Exception e) {
+        failed++;
+        System.out.println("⚠ Skipped chunk");
+    }
+}
+
+System.out.println("✅ Embeddings saved: " + success);
+System.out.println("⚠ Failed chunks: " + failed);
 
         } catch (Exception e) {
             e.printStackTrace();
