@@ -2,7 +2,6 @@ package com.documind.controller;
 
 import com.documind.model.Document;
 import com.documind.service.DocumentService;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,87 +20,54 @@ public class DocumentController {
     }
 
     // =========================
-    // ✅ Upload Document
+    // ✅ UPLOAD
     // =========================
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadDocument(
-            @RequestParam("file") MultipartFile file,
+    public ResponseEntity<?> upload(
+            @RequestParam MultipartFile file,
             @RequestParam String username
     ) {
-
-        try {
-            if (file == null || file.isEmpty()) {
-                return ResponseEntity.badRequest().body("❌ File is empty");
-            }
-
-            documentService.saveDocumentMetadata(file, username);
-
-            return ResponseEntity.ok("✅ Uploaded successfully");
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.internalServerError()
-                    .body("❌ Upload failed");
-        }
+        documentService.saveDocumentMetadata(file, username);
+        return ResponseEntity.ok("✅ Uploaded");
     }
 
     // =========================
-    // ✅ Get Document History
+    // 📂 HISTORY
     // =========================
     @GetMapping("/history")
-    public ResponseEntity<?> getHistory(
-            @RequestParam String username
-    ) {
-        try {
-            List<Document> docs =
-                    documentService.getDocumentsByUser(username);
+    public ResponseEntity<?> history(@RequestParam String username) {
 
-            return ResponseEntity.ok(docs);
+        List<Document> docs =
+                documentService.getDocumentsByUser(username);
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.internalServerError()
-                    .body("❌ Failed to fetch history");
-        }
+        return ResponseEntity.ok(docs);
     }
 
     // =========================
-    // ✅ Clear All Data
+    // 🗑 DELETE
+    // =========================
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id) {
+
+        documentService.deleteDocument(id);
+        return ResponseEntity.ok("✅ Deleted");
+    }
+
+    // =========================
+    // 🧹 CLEAR ALL
     // =========================
     @DeleteMapping("/clear")
-    public ResponseEntity<?> clearAll() {
-        try {
-            documentService.clearAll();
-            return ResponseEntity.ok("✅ All data cleared");
+    public ResponseEntity<?> clear() {
 
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body("❌ Failed to clear");
-        }
+        documentService.clearAll();
+        return ResponseEntity.ok("✅ Cleared");
     }
-    
-    @DeleteMapping("/delete/{id}")
-public ResponseEntity<?> deleteDocument(@PathVariable Long id) {
-    try {
-        documentService.deleteDocument(id);
-        return ResponseEntity.ok("✅ Document deleted");
-    } catch (Exception e) {
-        return ResponseEntity.internalServerError()
-                .body("❌ Delete failed");
-    }
-}
-    
+
     // =========================
-    // ✅ Debug API
+    // 🛠 DEBUG
     // =========================
     @GetMapping("/debug")
     public ResponseEntity<?> debug() {
-        try {
-            return ResponseEntity.ok(documentService.debugData());
-
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body("❌ Debug failed");
-        }
+        return ResponseEntity.ok(documentService.debugData());
     }
 }
