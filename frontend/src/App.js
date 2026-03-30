@@ -27,45 +27,12 @@ export default function App() {
   // ================= DATA =================
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState("");
-
-  const [sessions, setSessions] = useState([]);
-  const [selectedSessionId, setSelectedSessionId] = useState("");
-
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
-
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
   const chatEndRef = useRef(null);
-
-  // ================= AUTH FUNCTION =================
-  const handleAuth = async () => {
-    if (!username || !password) {
-      alert("Enter username & password");
-      return;
-    }
-
-    try {
-      const endpoint = isLogin ? "/auth/login" : "/auth/register";
-
-      const res = await api.post(endpoint, {
-        username,
-        password,
-      });
-
-      if (isLogin) {
-        const token = res.data.token;
-        localStorage.setItem("token", token);
-        localStorage.setItem("username", username);
-        setToken(token);
-      } else {
-        alert("Registered successfully");
-        setIsLogin(true);
-      }
-
-    } catch (err) {
-      alert("Auth failed");
-    }
-  };
 
   // ================= AUTO SCROLL =================
   useEffect(() => {
@@ -74,88 +41,71 @@ export default function App() {
 
   // ================= FETCH DOCS =================
   const fetchDocuments = async () => {
+    if (!username || username.trim() === "") return;
+
     try {
       const res = await api.get("/documents/history", {
         params: { username },
       });
       setDocuments(res.data || []);
-    } catch {}
+    } catch (e) {
+      console.log(e);
+    }
   };
 
   useEffect(() => {
     if (token) fetchDocuments();
   }, [token]);
+// chat history
+  const fetchChatHistory = async () => {
+  if (!username) return;
 
-  // ================= FETCH SESSIONS =================
-  const fetchSessions = async (docId) => {
-    try {
-      const res = await api.get("/chat/sessions", {
-        params: { username, documentId: docId },
-      });
-      setSessions(res.data || []);
-    } catch {}
-  };
-
-  // ================= FETCH CHAT =================
-  const fetchChatHistory = async (sessionId) => {
-    try {
-      const res = await api.get("/chat/history", {
-        params: { sessionId },
-      });
-
-      const formatted = res.data.flatMap((item) => [
-        { role: "user", text: item.question },
-        { role: "ai", text: item.answer },
-      ]);
-
-      setMessages(formatted);
-
-    } catch {}
-  };
-
-  // ================= DOC CHANGE =================
-  useEffect(() => {
-    if (selectedDocId) {
-      fetchSessions(selectedDocId);
-      setMessages([]);
-      setSelectedSessionId("");
-    }
-  }, [selectedDocId]);
-
-  // ================= SESSION CHANGE =================
-  useEffect(() => {
-    if (selectedSessionId) {
-      fetchChatHistory(selectedSessionId);
-    }
-  }, [selectedSessionId]);
-
-  // ================= CREATE SESSION =================
-  const createSession = async () => {
-    const res = await api.post("/chat/session/create", null, {
-      params: { username, documentId: selectedDocId },
+  try {
+    const res = await api.get("/chat/history", {
+      params: { username },
     });
 
-    fetchSessions(selectedDocId);
-    setSelectedSessionId(res.data.id);
-  };
+    // 🔥 convert backend format → UI format
+    const formatted = res.data.map(item => ({
+      role: "user",
+      text: item.question
+    })).flatMap((q, i) => ([
+      { role: "user", text: res.data[i].question },
+      { role: "ai", text: res.data[i].answer }
+    ]));
 
-  // ================= DELETE SESSION =================
-  const deleteSession = async (id) => {
-    await api.delete(`/chat/session/delete/${id}`);
-    fetchSessions(selectedDocId);
+    setMessages(formatted);
 
-    if (selectedSessionId === id) {
-      setMessages([]);
-      setSelectedSessionId("");
+  } catch (e) {
+    console.log(e);
+  }
+};
+  // ================= AUTH =================
+  const handleAuth = async () => {
+    try {
+      const url = isLogin ? "/auth/login" : "/auth/register";
+      const res = await api.post(url, { username, password });
+
+      if (isLogin) {
+        const t = res.data.token || res.data;
+        setToken(t);
+        localStorage.setItem("token", t);
+        localStorage.setItem("username", username);
+      } else {
+        alert("Registered! Login now");
+        setIsLogin(true);
+      }
+    } catch {
+      alert("Auth failed");
     }
   };
 
-  // ================= SEND =================
+  // ================= CHAT =================
   const sendMessage = async () => {
     if (!question.trim()) return;
 
-    if (!selectedSessionId) {
-      alert("Select chat first");
+    if (!selectedDocId) {
+      alert("Select document first");
       return;
     }
 
@@ -167,19 +117,29 @@ export default function App() {
 
     try {
       const res = await api.post("/chat/ask", null, {
-        params: { question: q, documentId: selectedDocId, sessionId: selectedSessionId },
+        params: {
+          question: q,
+          username,
+          documentId: selectedDocId,
+        },
       });
 
-      setMessages((prev) => [...prev, { role: "ai", text: res.data }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: res.data },
+      ]);
 
     } catch {
-      setMessages((prev) => [...prev, { role: "ai", text: "Error" }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: " Error" },
+      ]);
     }
 
     setLoading(false);
   };
 
-  // ================= ENTER =================
+  // ================= ENTER KEY =================
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -187,42 +147,93 @@ export default function App() {
     }
   };
 
+  // ================= UPLOAD =================
+  const uploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", username);
+
+    try {
+      setUploading(true);
+      await api.post("/documents/upload", formData);
+      fetchDocuments();
+    } catch {
+      alert("Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ================= DELETE =================
+  const deleteDoc = async (id) => {
+    try {
+      await api.delete(`/documents/delete/${id}`);
+      fetchDocuments();
+    } catch {
+      alert("Delete failed");
+    }
+  };
+
+  // ================= CLEAR CHAT =================
+  const clearChat = () => setMessages([]);
+
   // ================= LOGOUT =================
   const logout = () => {
     localStorage.clear();
     setToken("");
     setMessages([]);
+    setDocuments([]);
   };
 
   // ================= LOGIN UI =================
   if (!token) {
     return (
-      <div className="flex h-screen justify-center items-center">
-        <div className="bg-white p-8 rounded shadow w-80">
-          <input
-            className="w-full p-2 border mb-3"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-          <input
-            type="password"
-            className="w-full p-2 border mb-3"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+      <div className="flex h-screen">
 
-          <button onClick={handleAuth} className="w-full bg-blue-600 text-white p-2">
-            {isLogin ? "Login" : "Register"}
-          </button>
+        <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-4xl font-bold">
+          DocuMind AI
+        </div>
 
-          <p
-            className="text-blue-500 mt-2 cursor-pointer"
-            onClick={() => setIsLogin(!isLogin)}
-          >
-            {isLogin ? "Create account" : "Already have account?"}
-          </p>
+        <div className="w-1/2 flex items-center justify-center bg-gray-100">
+          <div className="bg-white p-8 rounded-xl shadow-lg w-80">
+
+            <h2 className="text-2xl font-bold mb-6 text-center">
+              {isLogin ? "Login" : "Register"}
+            </h2>
+
+            <input
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+
+            <input
+              type="password"
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button
+              onClick={handleAuth}
+              className="w-full bg-blue-600 text-white p-2 rounded"
+            >
+              {isLogin ? "Login" : "Register"}
+            </button>
+
+            <p
+              className="mt-4 text-center text-blue-600 cursor-pointer"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              new account   Register
+            </p>
+            
+          </div>
         </div>
       </div>
     );
@@ -233,34 +244,37 @@ export default function App() {
     <div className="flex h-screen bg-gray-900 text-white">
 
       {/* SIDEBAR */}
-      <div className="w-72 bg-black p-4 flex flex-col">
+      <div className="w-64 bg-black p-4 flex flex-col">
+
+        <button onClick={clearChat} className="bg-blue-600 p-2 rounded mb-3">
+          New Chat
+        </button>
+
+        <input type="file" onChange={uploadFile} />
+        {uploading && <p className="text-sm mt-2">Uploading...</p>}
 
         <select
-          className="text-black p-2 mb-3"
+          className="text-black mt-3 p-1 rounded"
           onChange={(e) => setSelectedDocId(e.target.value)}
         >
           <option>Select Document</option>
           {documents.map((d) => (
-            <option key={d.id} value={d.id}>{d.fileName}</option>
+            <option key={d.id} value={d.id}>
+              {d.fileName}
+            </option>
           ))}
         </select>
 
-        <button onClick={createSession} className="bg-blue-600 p-2 mb-3">
-          + New Chat
-        </button>
-
-        <div className="flex-1 overflow-y-auto">
-          {sessions.map((s) => (
-            <div key={s.id} className="flex justify-between bg-gray-800 p-2 mb-2">
-              <span onClick={() => setSelectedSessionId(s.id)}>
-                {s.name || "New Chat"}
-              </span>
-              <button onClick={() => deleteSession(s.id)}>❌</button>
+        <div className="mt-4 space-y-2">
+          {documents.map((d) => (
+            <div key={d.id} className="flex justify-between text-sm">
+              <span>{d.fileName}</span>
+              <button onClick={() => deleteDoc(d.id)}>❌</button>
             </div>
           ))}
         </div>
 
-        <button onClick={logout} className="bg-red-600 p-2 mt-2">
+        <button onClick={logout} className="mt-auto bg-red-600 p-2 rounded">
           Logout
         </button>
 
@@ -269,28 +283,49 @@ export default function App() {
       {/* CHAT */}
       <div className="flex-1 flex flex-col">
 
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 p-4 overflow-y-auto space-y-3">
+
           {messages.map((m, i) => (
-            <div key={i} className={`p-2 mb-2 ${m.role === "user" ? "text-right" : ""}`}>
+            <div
+              key={i}
+              className={`p-2 rounded max-w-xl ${
+                m.role === "user"
+                  ? "bg-blue-600 ml-auto"
+                  : "bg-gray-700"
+              }`}
+            >
               {m.text}
             </div>
           ))}
+
           {loading && <p>Thinking...</p>}
+
           <div ref={chatEndRef}></div>
         </div>
 
-        <div className="p-3 flex">
+        {/* INPUT */}
+        <div className="p-3 flex gap-2">
+
           <textarea
-            className="flex-1 p-2 text-black"
+            className="flex-1 p-2 text-black rounded resize-none"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
+            placeholder="Ask something... (Enter to send)"
+            rows={2}
           />
-          <button onClick={sendMessage} className="bg-blue-600 px-4">
-            Send
-          </button>
-        </div>
 
+          <button
+            onClick={sendMessage}
+            disabled={loading}
+            className={`px-6 rounded ${
+              loading ? "bg-gray-500" : "bg-blue-600"
+            }`}
+          >
+            {loading ? "..." : "Send"}
+          </button>
+
+        </div>
       </div>
     </div>
   );
