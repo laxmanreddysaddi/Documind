@@ -7,7 +7,6 @@ import com.documind.repository.DocumentRepository;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 
 import org.springframework.stereotype.Service;
@@ -43,6 +42,11 @@ public class DocumentService {
         try {
             System.out.println("🔥 Processing document...");
 
+            // 🔥 FILE SIZE LIMIT
+            if (file.getSize() > 5 * 1024 * 1024) {
+                throw new RuntimeException("❌ File too large (max 5MB)");
+            }
+
             String fileName = file.getOriginalFilename();
 
             boolean exists = documentRepository
@@ -53,7 +57,7 @@ public class DocumentService {
                 return;
             }
 
-            // ✅ SAVE DOC META
+            // ✅ SAVE META
             Document doc = new Document();
             doc.setFileName(fileName);
             doc.setFileSize(file.getSize());
@@ -61,12 +65,11 @@ public class DocumentService {
             doc.setUploadedAt(LocalDateTime.now());
 
             Document savedDoc = documentRepository.save(doc);
-            documentRepository.flush();
 
             System.out.println("📄 Doc ID: " + savedDoc.getId());
 
             // =========================
-            // 🔥 EXTRACT TEXT (PDF / DOCX / TXT)
+            // 🔥 EXTRACT TEXT
             // =========================
             String content = extractText(file);
 
@@ -74,32 +77,35 @@ public class DocumentService {
                 throw new RuntimeException("Empty document");
             }
 
-            System.out.println("📄 Content length: " + content.length());
-
             // =========================
             // 🔥 CLEAN TEXT
             // =========================
-            content = content.replace("\r", " ").replace("\n", " ");
+            content = content
+                    .replaceAll("\\s+", " ")
+                    .replaceAll("[^a-zA-Z0-9.,!? ]", " ")
+                    .trim();
+
+            System.out.println("📄 Clean length: " + content.length());
 
             // =========================
-            // 🔥 SENTENCE SPLIT
+            // 🔥 SPLIT SENTENCES
             // =========================
             String[] sentences = content.split("(?<=[.!?])\\s+");
 
             int count = 0;
+            int maxChunks = 50; // 🔥 LIMIT
 
             StringBuilder chunkBuilder = new StringBuilder();
             int chunkSize = 0;
 
-            // =========================
-            // 🔥 SMART CHUNKING
-            // =========================
             for (String sentence : sentences) {
+
+                if (count >= maxChunks) break;
 
                 chunkBuilder.append(sentence).append(" ");
                 chunkSize++;
 
-                if (chunkSize >= 4) {
+                if (chunkSize >= 3) {
 
                     saveChunk(chunkBuilder.toString(), savedDoc.getId());
                     count++;
@@ -109,13 +115,12 @@ public class DocumentService {
                 }
             }
 
-            // remaining chunk
-            if (!chunkBuilder.toString().isEmpty()) {
+            if (!chunkBuilder.toString().isEmpty() && count < maxChunks) {
                 saveChunk(chunkBuilder.toString(), savedDoc.getId());
                 count++;
             }
 
-            System.out.println("✅ Embeddings saved: " + count);
+            System.out.println("✅ Total chunks: " + count);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -131,7 +136,8 @@ public class DocumentService {
         try {
             chunk = chunk.trim();
 
-            if (chunk.length() < 20) return;
+            // 🔥 IGNORE BAD CHUNKS
+            if (chunk.length() < 50) return;
 
             float[] vector = embeddingService.embed(chunk).vector();
 
@@ -148,28 +154,51 @@ public class DocumentService {
     }
 
     // =========================
-    // 🔥 EXTRACT TEXT
+    // 🔥 SAFE TEXT EXTRACTION
     // =========================
     private String extractText(MultipartFile file) {
 
         try {
             String name = file.getOriginalFilename().toLowerCase();
-
             InputStream input = file.getInputStream();
 
+            // ===== PDF =====
             if (name.endsWith(".pdf")) {
-                PDDocument pdf = PDDocument.load(input);
-                PDFTextStripper stripper = new PDFTextStripper();
-                return stripper.getText(pdf);
+
+                try (PDDocument pdf = PDDocument.load(input)) {
+
+                    PDFTextStripper stripper = new PDFTextStripper();
+
+                    // 🔥 LIMIT PAGES
+                    stripper.setStartPage(1);
+                    stripper.setEndPage(Math.min(pdf.getNumberOfPages(), 20));
+
+                    return stripper.getText(pdf);
+                }
             }
 
+            // ===== DOCX =====
             if (name.endsWith(".docx")) {
-                XWPFDocument doc = new XWPFDocument(input);
-                XWPFWordExtractor extractor = new XWPFWordExtractor(doc);
-                return extractor.getText();
+
+                try (XWPFDocument doc = new XWPFDocument(input)) {
+
+                    StringBuilder text = new StringBuilder();
+                    int count = 0;
+
+                    for (var para : doc.getParagraphs()) {
+
+                        text.append(para.getText()).append("\n");
+                        count++;
+
+                        // 🔥 LIMIT PARAGRAPHS
+                        if (count > 300) break;
+                    }
+
+                    return text.toString();
+                }
             }
 
-            // fallback (txt)
+            // ===== TXT =====
             return new String(file.getBytes(), StandardCharsets.UTF_8);
 
         } catch (Exception e) {
@@ -192,38 +221,23 @@ public class DocumentService {
     }
 
     // =========================
-// 🗑 DELETE DOCUMENT
-// =========================
-public void deleteDocument(Long documentId) {
+    // 🗑 DELETE
+    // =========================
+    public void deleteDocument(Long documentId) {
 
-    try {
-        System.out.println("🗑 Deleting document: " + documentId);
-
-        // 🔥 delete embeddings first
         embeddingRepository.deleteByDocumentId(documentId);
-
-        // 🔥 then delete document
         documentRepository.deleteById(documentId);
 
-        System.out.println("✅ Document deleted");
-
-    } catch (Exception e) {
-        e.printStackTrace();
-        throw new RuntimeException("❌ Delete failed");
+        System.out.println("✅ Deleted doc: " + documentId);
     }
-}
 
-// =========================
-// 🛠 DEBUG DATA
-// =========================
-public String debugData() {
-
-    long docCount = documentRepository.count();
-    long embedCount = embeddingRepository.count();
-
-    return "📄 Documents: " + docCount +
-           " | 🔢 Embeddings: " + embedCount;
-}
+    // =========================
+    // 🛠 DEBUG
+    // =========================
+    public String debugData() {
+        return "Docs: " + documentRepository.count() +
+               " | Embeddings: " + embeddingRepository.count();
+    }
 
     public void clearAll() {
         embeddingRepository.deleteAll();
