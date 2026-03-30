@@ -43,7 +43,7 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ================= FETCH DOCS =================
+  // ================= FETCH DOCUMENTS =================
   const fetchDocuments = async () => {
     if (!username) return;
 
@@ -118,11 +118,33 @@ export default function App() {
       });
 
       setSelectedSessionId(res.data.id);
-      setMessages([]); // clear UI
+      setMessages([]);
       fetchSessions(selectedDocId);
 
     } catch {
       alert("Create session failed");
+    }
+  };
+
+  // ================= DELETE DOCUMENT =================
+  const deleteDocument = async (id) => {
+
+    const confirmDelete = window.confirm("Delete this document?");
+    if (!confirmDelete) return;
+
+    try {
+      await api.delete(`/documents/delete/${id}`);
+
+      if (selectedDocId == id) {
+        setSelectedDocId("");
+        setMessages([]);
+        setSessions([]);
+      }
+
+      fetchDocuments();
+
+    } catch {
+      alert("Delete failed");
     }
   };
 
@@ -146,7 +168,7 @@ export default function App() {
     }
   };
 
-  // ================= 🔥 FIXED CHAT =================
+  // ================= CHAT =================
   const sendMessage = async () => {
     if (!question.trim()) return;
 
@@ -157,7 +179,6 @@ export default function App() {
 
     let sessionId = selectedSessionId;
 
-    // 🔥 AUTO CREATE SESSION
     if (!sessionId) {
       try {
         const res = await api.post("/chat/session/create", null, {
@@ -301,19 +322,33 @@ export default function App() {
 
         <input type="file" onChange={uploadFile} />
 
-        <select
-          className="text-black mt-3 p-1 rounded"
-          onChange={(e) => setSelectedDocId(e.target.value)}
-        >
-          <option>Select Document</option>
+        {/* 📂 DOCUMENTS */}
+        <div className="mt-3 space-y-2">
           {documents.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.fileName}
-            </option>
-          ))}
-        </select>
+            <div
+              key={d.id}
+              className={`p-2 rounded flex justify-between items-center ${
+                selectedDocId == d.id ? "bg-blue-600" : "bg-gray-800"
+              }`}
+            >
+              <span
+                className="cursor-pointer flex-1"
+                onClick={() => setSelectedDocId(d.id)}
+              >
+                {d.fileName}
+              </span>
 
-        {/* 🔥 SESSIONS */}
+              <button
+                onClick={() => deleteDocument(d.id)}
+                className="ml-2 text-red-400"
+              >
+                🗑
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* 💬 SESSIONS */}
         <div className="mt-3 space-y-2">
           {sessions.map((s) => (
             <div
