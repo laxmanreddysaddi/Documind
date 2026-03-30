@@ -17,14 +17,14 @@ public class CorsConfig {
 
         config.setAllowCredentials(true);
 
-        // 🔥 VERY IMPORTANT (your frontend URL)
-        config.setAllowedOrigins(List.of(
+        // 🔥 IMPORTANT: allow ALL vercel domains
+        config.setAllowedOriginPatterns(List.of(
                 "http://localhost:3000",
-                "https://documind-42p34om84-laxmanreddysaddis-projects.vercel.app"
+                "https://*.vercel.app"
         ));
 
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("*"));
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
