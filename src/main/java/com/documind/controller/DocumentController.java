@@ -10,7 +10,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/documents")
-@CrossOrigin("*")
 public class DocumentController {
 
     private final DocumentService documentService;
