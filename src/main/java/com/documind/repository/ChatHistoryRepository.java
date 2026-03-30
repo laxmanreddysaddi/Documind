@@ -7,10 +7,6 @@ import java.util.List;
 
 public interface ChatHistoryRepository extends JpaRepository<ChatHistory, Long> {
 
-    // ✅ FIX THIS LINE
-    List<ChatHistory> findByUserUsernameOrderByTimestampAsc(String username);
+    // 🔥 GET CHAT BY SESSION
     List<ChatHistory> findBySessionIdOrderByTimestampAsc(Long sessionId);
-
-    // ✅ For clear chat
-    void deleteByUserUsername(String username);
 }
