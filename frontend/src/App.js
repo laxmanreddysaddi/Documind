@@ -179,10 +179,16 @@ export default function App() {
 
     let sessionId = selectedSessionId;
 
+    const q = question; // 🔥 IMPORTANT
+
     if (!sessionId) {
       try {
         const res = await api.post("/chat/session/create", null, {
-          params: { username, documentId: selectedDocId },
+          params: {
+            username,
+            documentId: selectedDocId,
+            question: q // 🔥 AUTO NAME FIX
+          },
         });
 
         sessionId = res.data.id;
@@ -195,7 +201,6 @@ export default function App() {
       }
     }
 
-    const q = question;
     setQuestion("");
 
     setMessages((prev) => [...prev, { role: "user", text: q }]);
@@ -264,45 +269,34 @@ export default function App() {
   // ================= LOGIN UI =================
   if (!token) {
     return (
-      <div className="flex h-screen">
-        <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-4xl font-bold">
+      <div className="flex h-screen bg-gradient-to-br from-black to-gray-900">
+        <div className="w-1/2 flex items-center justify-center text-white text-4xl font-bold">
           DocuMind AI
         </div>
 
-        <div className="w-1/2 flex items-center justify-center bg-gray-100">
-          <div className="bg-white p-8 rounded-xl shadow-lg w-80">
+        <div className="w-1/2 flex items-center justify-center">
+          <div className="backdrop-blur-xl bg-white/10 p-8 rounded-xl w-80 text-white">
             <h2 className="text-2xl font-bold mb-6 text-center">
               {isLogin ? "Login" : "Register"}
             </h2>
 
-            <input
-              className="w-full p-2 border rounded mb-4"
+            <input className="w-full p-2 mb-4 rounded bg-white/20"
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
 
-            <input
-              type="password"
-              className="w-full p-2 border rounded mb-4"
+            <input type="password"
+              className="w-full p-2 mb-4 rounded bg-white/20"
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button
-              onClick={handleAuth}
-              className="w-full bg-blue-600 text-white p-2 rounded"
-            >
+            <button onClick={handleAuth}
+              className="w-full bg-blue-600 p-2 rounded">
               {isLogin ? "Login" : "Register"}
             </button>
-
-            <p
-              className="mt-4 text-center text-blue-600 cursor-pointer"
-              onClick={() => setIsLogin(!isLogin)}
-            >
-              {isLogin ? "Create account" : "Already have account?"}
-            </p>
           </div>
         </div>
       </div>
@@ -311,53 +305,46 @@ export default function App() {
 
   // ================= MAIN UI =================
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+    <div className="flex h-screen bg-gradient-to-br from-black to-gray-900 text-white">
 
       {/* SIDEBAR */}
-      <div className="w-64 bg-black p-4 flex flex-col">
+      <div className="w-64 p-4 flex flex-col backdrop-blur-xl bg-white/10 border-r border-white/20">
 
-        <button onClick={createSession} className="bg-blue-600 p-2 rounded mb-3">
+        <button onClick={createSession}
+          className="bg-blue-600 p-2 rounded mb-3 hover:bg-blue-700">
           + New Chat
         </button>
 
         <input type="file" onChange={uploadFile} />
 
-        {/* 📂 DOCUMENTS */}
+        {/* DOCUMENTS */}
         <div className="mt-3 space-y-2">
           {documents.map((d) => (
-            <div
-              key={d.id}
-              className={`p-2 rounded flex justify-between items-center ${
-                selectedDocId == d.id ? "bg-blue-600" : "bg-gray-800"
+            <div key={d.id}
+              className={`p-2 rounded flex justify-between items-center backdrop-blur-md ${
+                selectedDocId == d.id ? "bg-blue-500/40" : "bg-white/10"
               }`}
             >
-              <span
-                className="cursor-pointer flex-1"
-                onClick={() => setSelectedDocId(d.id)}
-              >
+              <span className="cursor-pointer flex-1"
+                onClick={() => setSelectedDocId(d.id)}>
                 {d.fileName}
               </span>
 
-              <button
-                onClick={() => deleteDocument(d.id)}
-                className="ml-2 text-red-400"
-              >
+              <button onClick={() => deleteDocument(d.id)}
+                className="text-red-400">
                 🗑
               </button>
             </div>
           ))}
         </div>
 
-        {/* 💬 SESSIONS */}
+        {/* SESSIONS */}
         <div className="mt-3 space-y-2">
           {sessions.map((s) => (
-            <div
-              key={s.id}
+            <div key={s.id}
               onClick={() => setSelectedSessionId(s.id)}
-              className={`p-2 cursor-pointer rounded ${
-                selectedSessionId === s.id
-                  ? "bg-blue-600"
-                  : "bg-gray-800"
+              className={`p-2 rounded cursor-pointer backdrop-blur-md ${
+                selectedSessionId === s.id ? "bg-blue-500/40" : "bg-white/10"
               }`}
             >
               {s.name || "New Chat"}
@@ -365,10 +352,10 @@ export default function App() {
           ))}
         </div>
 
-        <button onClick={logout} className="mt-auto bg-red-600 p-2 rounded">
+        <button onClick={logout}
+          className="mt-auto bg-red-600 p-2 rounded hover:bg-red-700">
           Logout
         </button>
-
       </div>
 
       {/* CHAT */}
@@ -377,12 +364,11 @@ export default function App() {
         <div className="flex-1 p-4 overflow-y-auto space-y-3">
 
           {messages.map((m, i) => (
-            <div
-              key={i}
-              className={`p-2 rounded max-w-xl ${
+            <div key={i}
+              className={`p-3 rounded-xl max-w-xl backdrop-blur-md ${
                 m.role === "user"
-                  ? "bg-blue-600 ml-auto"
-                  : "bg-gray-700"
+                  ? "bg-blue-500/40 ml-auto"
+                  : "bg-white/10"
               }`}
             >
               {m.text}
@@ -394,10 +380,10 @@ export default function App() {
           <div ref={chatEndRef}></div>
         </div>
 
-        <div className="p-3 flex gap-2">
+        <div className="p-3 flex gap-2 backdrop-blur-xl bg-white/10">
 
           <textarea
-            className="flex-1 p-2 text-black rounded resize-none"
+            className="flex-1 p-2 rounded bg-white/20 text-white resize-none"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -405,10 +391,8 @@ export default function App() {
             rows={2}
           />
 
-          <button
-            onClick={sendMessage}
-            className="px-6 bg-blue-600 rounded"
-          >
+          <button onClick={sendMessage}
+            className="px-6 bg-blue-600 rounded hover:bg-blue-700">
             Send
           </button>
 
