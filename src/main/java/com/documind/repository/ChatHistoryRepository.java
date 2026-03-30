@@ -7,9 +7,9 @@ import java.util.List;
 
 public interface ChatHistoryRepository extends JpaRepository<ChatHistory, Long> {
 
-    // ✅ Get user-specific history
-    List<ChatHistory> findByUserUsername(String username);
+    // ✅ FIX THIS LINE
+    List<ChatHistory> findByUserUsernameOrderByTimestampAsc(String username);
 
-    // ✅ Delete user history
+    // ✅ For clear chat
     void deleteByUserUsername(String username);
 }

@@ -1,19 +1,29 @@
 package com.documind.service;
 
+import com.documind.model.ChatHistory;
+import com.documind.model.User;
+import com.documind.repository.ChatHistoryRepository;
+import com.documind.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class ChatService {
 
     private final RagService ragService;
+    private final ChatHistoryRepository chatRepo;
+    private final UserRepository userRepo;
 
-    // 🔥 In-memory chat history (per user)
-    private final Map<String, List<String>> chatHistory = new HashMap<>();
-
-    public ChatService(RagService ragService) {
+    public ChatService(
+            RagService ragService,
+            ChatHistoryRepository chatRepo,
+            UserRepository userRepo
+    ) {
         this.ragService = ragService;
+        this.chatRepo = chatRepo;
+        this.userRepo = userRepo;
     }
 
     // =========================
@@ -30,14 +40,20 @@ public class ChatService {
             return "⚠ Select document first";
         }
 
-        // 🔥 STRICT RAG CALL (FIXED)
+        // 🔥 CALL RAG
         String answer = ragService.ask(question, documentId);
 
-        // ================= SAVE CHAT =================
-        chatHistory.putIfAbsent(username, new ArrayList<>());
+        // ================= SAVE TO DATABASE =================
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-        chatHistory.get(username).add("Q: " + question);
-        chatHistory.get(username).add("A: " + answer);
+        ChatHistory chat = new ChatHistory();
+        chat.setQuestion(question);
+        chat.setAnswer(answer);
+        chat.setTimestamp(LocalDateTime.now());
+        chat.setUser(user);
+
+        chatRepo.save(chat);
 
         return answer;
     }
@@ -45,14 +61,14 @@ public class ChatService {
     // =========================
     // ✅ GET HISTORY
     // =========================
-    public List<String> getChatHistory(String username) {
-        return chatHistory.getOrDefault(username, new ArrayList<>());
+    public List<ChatHistory> getChatHistory(String username) {
+        return chatRepo.findByUserUsernameOrderByTimestampAsc(username);
     }
 
     // =========================
     // ✅ CLEAR CHAT
     // =========================
     public void clearChat(String username) {
-        chatHistory.remove(username);
+        chatRepo.deleteByUserUsername(username);
     }
 }
