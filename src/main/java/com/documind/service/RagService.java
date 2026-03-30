@@ -29,10 +29,16 @@ public class RagService {
 
         try {
             System.out.println("🔥 ===== RAG STARTED =====");
-            System.out.println("❓ Question: " + question);
+
+            // ✅ FINAL FIX (NO ERROR + FINAL VARIABLE)
+            final String cleanQuestion = normalizeText(
+                    question == null ? "" : question.toLowerCase().trim()
+            );
+
+            System.out.println("❓ Question: " + cleanQuestion);
 
             // ================= QUERY EMBEDDING =================
-            float[] queryVector = embeddingService.embed(question).vector();
+            float[] queryVector = embeddingService.embed(cleanQuestion).vector();
 
             // ================= FETCH EMBEDDINGS =================
             List<DocumentEmbedding> embeddings =
@@ -51,10 +57,18 @@ public class RagService {
                                 stringToVector(e.getEmbedding())
                         );
 
-                        // 🔥 KEYWORD BOOST (IMPORTANT)
-                        if (e.getChunkText().toLowerCase()
-                                .contains(question.toLowerCase())) {
-                            score += 0.1f;
+                        String text = e.getChunkText().toLowerCase();
+
+                        // 🔥 STRONG MATCH BOOST
+                        if (text.contains(cleanQuestion)) {
+                            score += 0.3f;
+                        }
+
+                        // 🔥 PARTIAL MATCH BOOST
+                        for (String word : cleanQuestion.split(" ")) {
+                            if (text.contains(word)) {
+                                score += 0.05f;
+                            }
                         }
 
                         return new ScoredChunk(e.getChunkText(), score);
@@ -65,40 +79,29 @@ public class RagService {
             float maxScore = scoredChunks.get(0).score;
             System.out.println("🔥 Max Score: " + maxScore);
 
-            // ================= SMART THRESHOLD =================
-            float threshold = Math.max(0.55f, maxScore - 0.1f);
-
-            List<ScoredChunk> filtered = scoredChunks.stream()
-                    .filter(c -> c.score >= threshold)
-                    .limit(5)
+            // ================= TOP 3 CONTEXT =================
+            List<ScoredChunk> topChunks = scoredChunks.stream()
+                    .limit(3)
                     .toList();
 
-            // ================= FALLBACK =================
-            if (filtered.isEmpty()) {
-                filtered = scoredChunks.stream().limit(2).toList();
-            }
-
-            // ================= CONTEXT =================
-            String context = filtered.stream()
+            String context = topChunks.stream()
                     .map(c -> c.text)
                     .collect(Collectors.joining("\n\n"));
 
-            System.out.println("📄 Context:\n" + context);
+            System.out.println("📄 FINAL CONTEXT:\n" + context);
 
-            // ================= STRICT PROMPT =================
+            // ================= PROMPT =================
             String prompt =
                     "You are DocuMind AI.\n\n" +
-                    "STRICT RULES:\n" +
-                    "1. Answer ONLY from the context.\n" +
-                    "2. Do NOT use outside knowledge.\n" +
-                    "3. If answer is not in context, say EXACTLY: Not found in document.\n\n" +
+                    "Answer using ONLY the given context.\n" +
+                    "Be clear and short.\n" +
+                    "If partial information exists, still answer.\n\n" +
                     "Context:\n" + context +
-                    "\n\nQuestion:\n" + question +
+                    "\n\nQuestion:\n" + cleanQuestion +
                     "\n\nAnswer:";
 
             String answer = chatModel.generate(prompt);
 
-            // ================= FINAL SAFETY =================
             if (answer == null || answer.trim().isEmpty()) {
                 return "Not found in document";
             }
@@ -111,7 +114,26 @@ public class RagService {
         }
     }
 
-    // ================= COSINE =================
+    // ================= NORMALIZE TEXT =================
+    private String normalizeText(String text) {
+
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < text.length(); i++) {
+
+            if (i > 1 &&
+                text.charAt(i) == text.charAt(i - 1) &&
+                text.charAt(i) == text.charAt(i - 2)) {
+                continue;
+            }
+
+            result.append(text.charAt(i));
+        }
+
+        return result.toString();
+    }
+
+    // ================= COSINE SIMILARITY =================
     private float cosineSimilarity(float[] a, float[] b) {
 
         int length = Math.min(a.length, b.length);
@@ -144,7 +166,7 @@ public class RagService {
         return vector;
     }
 
-    // ================= HELPER =================
+    // ================= HELPER CLASS =================
     static class ScoredChunk {
         String text;
         float score;
