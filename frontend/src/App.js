@@ -34,7 +34,10 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // 🔥 NEW STATES
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const chatEndRef = useRef(null);
 
@@ -159,7 +162,6 @@ export default function App() {
     let sessionId = selectedSessionId;
     const q = question;
 
-    // 🔥 CREATE SESSION ONLY IF NOT EXISTS
     if (!sessionId) {
       try {
         const res = await api.post("/chat/session/create", null, {
@@ -173,7 +175,6 @@ export default function App() {
         sessionId = res.data.id;
         setSelectedSessionId(sessionId);
 
-        // 🔥 INSTANT UI UPDATE
         const cleanName = q.replace(/\s+/g, " ").trim().substring(0, 30);
 
         setSessions((prev) => [
@@ -181,7 +182,6 @@ export default function App() {
           ...prev,
         ]);
 
-        // 🔥 SYNC BACKEND
         setTimeout(() => fetchSessions(selectedDocId), 300);
 
       } catch {
@@ -226,7 +226,7 @@ export default function App() {
     }
   };
 
-  // ================= UPLOAD =================
+  // ================= 🔥 UPDATED UPLOAD =================
   const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -237,12 +237,24 @@ export default function App() {
 
     try {
       setUploading(true);
-      await api.post("/documents/upload", formData);
+      setUploadProgress(0);
+
+      await api.post("/documents/upload", formData, {
+        onUploadProgress: (progressEvent) => {
+          const percent = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setUploadProgress(percent);
+        },
+      });
+
       fetchDocuments();
+
     } catch {
       alert("Upload failed");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -305,6 +317,26 @@ export default function App() {
 
         <input type="file" onChange={uploadFile} />
 
+        {/* 🔥 UPLOAD UI */}
+        {uploading && (
+          <div className="mt-3">
+            <div className="text-xs text-blue-300 mb-1">
+              ⏳ Uploading {uploadProgress}%
+            </div>
+
+            <div className="w-full h-2 bg-white/20 rounded">
+              <div
+                className="h-2 bg-blue-500 rounded transition-all"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+
+            <p className="text-xs text-yellow-300 mt-1">
+              Processing document...
+            </p>
+          </div>
+        )}
+
         {/* DOCUMENTS */}
         <div className="mt-3 space-y-2">
           {documents.map((d) => (
@@ -348,7 +380,6 @@ export default function App() {
 
       {/* CHAT */}
       <div className="flex-1 flex flex-col">
-
         <div className="flex-1 p-4 overflow-y-auto space-y-3">
 
           {messages.map((m, i) => (
@@ -368,7 +399,6 @@ export default function App() {
         </div>
 
         <div className="p-3 flex gap-2 backdrop-blur-xl bg-white/10">
-
           <textarea
             className="flex-1 p-2 rounded bg-white/20 text-white resize-none"
             value={question}
@@ -382,7 +412,6 @@ export default function App() {
             className="px-6 bg-blue-600 rounded hover:bg-blue-700">
             Send
           </button>
-
         </div>
       </div>
     </div>
