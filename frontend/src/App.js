@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-
 const BASE_URL =
   process.env.REACT_APP_API_URL ||
   "https://documind-backend-30m4.onrender.com/api";
@@ -11,13 +10,19 @@ const api = axios.create({
   withCredentials: true,
 });
 
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 export default function App() {
 
   // ================= AUTH =================
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState(localStorage.getItem("username") || "");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token") || "");
-  const [isLogin, setIsLogin] = useState(true);
 
   // ================= DATA =================
   const [documents, setDocuments] = useState([]);
@@ -29,6 +34,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const chatEndRef = useRef(null);
 
@@ -37,8 +43,10 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ================= FETCH =================
+  // ================= FETCH DOCUMENTS =================
   const fetchDocuments = async () => {
+    if (!username) return;
+
     try {
       const res = await api.get("/documents/history", {
         params: { username },
@@ -47,7 +55,14 @@ export default function App() {
     } catch {}
   };
 
+  useEffect(() => {
+    if (token) fetchDocuments();
+  }, [token]);
+
+  // ================= FETCH SESSIONS =================
   const fetchSessions = async (docId) => {
+    if (!docId) return;
+
     try {
       const res = await api.get("/chat/sessions", {
         params: { username, documentId: docId },
@@ -56,7 +71,10 @@ export default function App() {
     } catch {}
   };
 
+  // ================= FETCH CHAT =================
   const fetchChatHistory = async (sessionId) => {
+    if (!sessionId) return;
+
     try {
       const res = await api.get("/chat/history", {
         params: { sessionId },
@@ -71,10 +89,7 @@ export default function App() {
     } catch {}
   };
 
-  useEffect(() => {
-    if (token) fetchDocuments();
-  }, [token]);
-
+  // ================= DOC CHANGE =================
   useEffect(() => {
     if (selectedDocId) {
       fetchSessions(selectedDocId);
@@ -83,11 +98,55 @@ export default function App() {
     }
   }, [selectedDocId]);
 
+  // ================= SESSION CHANGE =================
   useEffect(() => {
     if (selectedSessionId) {
       fetchChatHistory(selectedSessionId);
     }
   }, [selectedSessionId]);
+
+  // ================= CREATE SESSION =================
+  const createSession = async () => {
+    if (!selectedDocId) {
+      alert("Select document first");
+      return;
+    }
+
+    try {
+      const res = await api.post("/chat/session/create", null, {
+        params: { username, documentId: selectedDocId },
+      });
+
+      setSelectedSessionId(res.data.id);
+      setMessages([]);
+      fetchSessions(selectedDocId);
+
+    } catch {
+      alert("Create session failed");
+    }
+  };
+
+  // ================= DELETE DOCUMENT =================
+  const deleteDocument = async (id) => {
+
+    const confirmDelete = window.confirm("Delete this document?");
+    if (!confirmDelete) return;
+
+    try {
+      await api.delete(`/documents/delete/${id}`);
+
+      if (selectedDocId == id) {
+        setSelectedDocId("");
+        setMessages([]);
+        setSessions([]);
+      }
+
+      fetchDocuments();
+
+    } catch {
+      alert("Delete failed");
+    }
+  };
 
   // ================= AUTH =================
   const handleAuth = async () => {
@@ -113,15 +172,27 @@ export default function App() {
   const sendMessage = async () => {
     if (!question.trim()) return;
 
+    if (!selectedDocId) {
+      alert("Select document first");
+      return;
+    }
+
     let sessionId = selectedSessionId;
 
     if (!sessionId) {
-      const res = await api.post("/chat/session/create", null, {
-        params: { username, documentId: selectedDocId },
-      });
-      sessionId = res.data.id;
-      setSelectedSessionId(sessionId);
-      fetchSessions(selectedDocId);
+      try {
+        const res = await api.post("/chat/session/create", null, {
+          params: { username, documentId: selectedDocId },
+        });
+
+        sessionId = res.data.id;
+        setSelectedSessionId(sessionId);
+        fetchSessions(selectedDocId);
+
+      } catch {
+        alert("Failed to create session");
+        return;
+      }
     }
 
     const q = question;
@@ -132,41 +203,29 @@ export default function App() {
 
     try {
       const res = await api.post("/chat/ask", null, {
-        params: { question: q, documentId: selectedDocId, sessionId },
+        params: {
+          question: q,
+          documentId: selectedDocId,
+          sessionId: sessionId,
+        },
       });
 
-      const fullText = res.data;
-
-      let index = 0;
-      let current = "";
-
-      setMessages((prev) => [...prev, { role: "ai", text: "" }]);
-
-      const interval = setInterval(() => {
-        if (index < fullText.length) {
-          current += fullText[index];
-          index++;
-
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1].text = current;
-            return updated;
-          });
-        } else {
-          clearInterval(interval);
-          setLoading(false);
-        }
-      }, 10);
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: res.data },
+      ]);
 
     } catch {
       setMessages((prev) => [
         ...prev,
         { role: "ai", text: "Error" },
       ]);
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
+  // ================= ENTER =================
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -174,133 +233,186 @@ export default function App() {
     }
   };
 
-  // ================= VOICE =================
-  const startVoice = () => {
-    if (!("webkitSpeechRecognition" in window)) {
-      alert("Voice not supported");
-      return;
+  // ================= UPLOAD =================
+  const uploadFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", username);
+
+    try {
+      setUploading(true);
+      await api.post("/documents/upload", formData);
+      fetchDocuments();
+    } catch {
+      alert("Upload failed");
+    } finally {
+      setUploading(false);
     }
-
-    const recognition = new window.webkitSpeechRecognition();
-    recognition.lang = "en-US";
-
-    recognition.onresult = (event) => {
-      setQuestion(event.results[0][0].transcript);
-    };
-
-    recognition.start();
-  };
-  // ================= DELETE DOC =================
-  const deleteDocument = async (id) => {
-    await api.delete(`/documents/delete/${id}`);
-
-    if (selectedDocId == id) {
-      setSelectedDocId("");
-      setMessages([]);
-      setSessions([]);
-    }
-
-    fetchDocuments();
   };
 
-  // ================= LOGIN =================
+  // ================= LOGOUT =================
+  const logout = () => {
+    localStorage.clear();
+    setToken("");
+    setMessages([]);
+    setDocuments([]);
+  };
+
+  // ================= LOGIN UI =================
   if (!token) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-black">
-        <div className="backdrop-blur-xl bg-white/10 p-8 rounded-2xl w-80 text-white">
-          <h2 className="text-2xl font-bold mb-6 text-center">
-            {isLogin ? "Login" : "Register"}
-          </h2>
+      <div className="flex h-screen">
+        <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-4xl font-bold">
+          DocuMind AI
+        </div>
 
-          <input
-            className="w-full p-2 mb-3 rounded bg-white/20"
-            placeholder="Username"
-            onChange={(e) => setUsername(e.target.value)}
-          />
+        <div className="w-1/2 flex items-center justify-center bg-gray-100">
+          <div className="bg-white p-8 rounded-xl shadow-lg w-80">
+            <h2 className="text-2xl font-bold mb-6 text-center">
+              {isLogin ? "Login" : "Register"}
+            </h2>
 
-          <input
-            type="password"
-            className="w-full p-2 mb-4 rounded bg-white/20"
-            placeholder="Password"
-            onChange={(e) => setPassword(e.target.value)}
-          />
+            <input
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
 
-          <button onClick={handleAuth} className="w-full bg-blue-500 p-2 rounded">
-            {isLogin ? "Login" : "Register"}
-          </button>
+            <input
+              type="password"
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
 
-          <p className="mt-4 text-center cursor-pointer" onClick={() => setIsLogin(!isLogin)}>
-            Switch
-          </p>
+            <button
+              onClick={handleAuth}
+              className="w-full bg-blue-600 text-white p-2 rounded"
+            >
+              {isLogin ? "Login" : "Register"}
+            </button>
+
+            <p
+              className="mt-4 text-center text-blue-600 cursor-pointer"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              {isLogin ? "Create account" : "Already have account?"}
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ================= MAIN =================
+  // ================= MAIN UI =================
   return (
-    <div className="flex h-screen bg-gradient-to-br from-black to-gray-900 text-white">
+    <div className="flex h-screen bg-gray-900 text-white">
 
       {/* SIDEBAR */}
-      <div className="w-64 p-4 backdrop-blur-xl bg-white/10">
+      <div className="w-64 bg-black p-4 flex flex-col">
 
-        <button
-          onClick={() => setSelectedSessionId("")}
-          className="w-full mb-3 p-2 bg-blue-500 rounded"
-        >
+        <button onClick={createSession} className="bg-blue-600 p-2 rounded mb-3">
           + New Chat
         </button>
 
-        <input type="file" className="mb-3" />
+        <input type="file" onChange={uploadFile} />
 
-        {documents.map((d) => (
-          <div key={d.id} className="flex justify-between p-2">
-            <span onClick={() => setSelectedDocId(d.id)}>{d.fileName}</span>
-            <button onClick={() => deleteDocument(d.id)}>🗑</button>
-          </div>
-        ))}
+        {/* 📂 DOCUMENTS */}
+        <div className="mt-3 space-y-2">
+          {documents.map((d) => (
+            <div
+              key={d.id}
+              className={`p-2 rounded flex justify-between items-center ${
+                selectedDocId == d.id ? "bg-blue-600" : "bg-gray-800"
+              }`}
+            >
+              <span
+                className="cursor-pointer flex-1"
+                onClick={() => setSelectedDocId(d.id)}
+              >
+                {d.fileName}
+              </span>
 
-        <div className="mt-4">
-          {sessions.map((s) => (
-            <div key={s.id} onClick={() => setSelectedSessionId(s.id)}>
-              {s.name}
+              <button
+                onClick={() => deleteDocument(d.id)}
+                className="ml-2 text-red-400"
+              >
+                🗑
+              </button>
             </div>
           ))}
         </div>
+
+        {/* 💬 SESSIONS */}
+        <div className="mt-3 space-y-2">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              onClick={() => setSelectedSessionId(s.id)}
+              className={`p-2 cursor-pointer rounded ${
+                selectedSessionId === s.id
+                  ? "bg-blue-600"
+                  : "bg-gray-800"
+              }`}
+            >
+              {s.name || "New Chat"}
+            </div>
+          ))}
+        </div>
+
+        <button onClick={logout} className="mt-auto bg-red-600 p-2 rounded">
+          Logout
+        </button>
+
       </div>
 
       {/* CHAT */}
       <div className="flex-1 flex flex-col">
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 p-4 overflow-y-auto space-y-3">
+
           {messages.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "text-right" : ""}>
+            <div
+              key={i}
+              className={`p-2 rounded max-w-xl ${
+                m.role === "user"
+                  ? "bg-blue-600 ml-auto"
+                  : "bg-gray-700"
+              }`}
+            >
               {m.text}
             </div>
           ))}
+
+          {loading && <p>Thinking...</p>}
+
           <div ref={chatEndRef}></div>
         </div>
 
-        <div className="p-4 flex gap-2">
+        <div className="p-3 flex gap-2">
 
           <textarea
+            className="flex-1 p-2 text-black rounded resize-none"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex-1 p-3 rounded bg-white/20"
+            placeholder="Ask something..."
+            rows={2}
           />
 
-          <button onClick={sendMessage} className="bg-blue-500 px-4">Send</button>
-          <button onClick={startVoice} className="bg-purple-500 px-4">🎤</button>
-        </div>
+          <button
+            onClick={sendMessage}
+            className="px-6 bg-blue-600 rounded"
+          >
+            Send
+          </button>
 
-        {/* Suggestions */}
-        <div className="p-2 flex gap-2 flex-wrap">
-          {["Summarize", "Key points", "Explain"].map((s) => (
-            <button key={s} onClick={() => setQuestion(s)}>{s}</button>
-          ))}
         </div>
-
       </div>
     </div>
   );
