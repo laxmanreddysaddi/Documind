@@ -27,6 +27,11 @@ export default function App() {
   // ================= DATA =================
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState("");
+
+  // 🔥 NEW (sessions)
+  const [sessions, setSessions] = useState([]);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,7 +46,7 @@ export default function App() {
 
   // ================= FETCH DOCS =================
   const fetchDocuments = async () => {
-    if (!username || username.trim() === "") return;
+    if (!username) return;
 
     try {
       const res = await api.get("/documents/history", {
@@ -56,30 +61,78 @@ export default function App() {
   useEffect(() => {
     if (token) fetchDocuments();
   }, [token]);
-// chat history
-  const fetchChatHistory = async () => {
-  if (!username) return;
 
-  try {
-    const res = await api.get("/chat/history", {
-      params: { username },
-    });
+  // ================= FETCH SESSIONS =================
+  const fetchSessions = async (docId) => {
+    if (!docId) return;
 
-    // 🔥 convert backend format → UI format
-    const formatted = res.data.map(item => ({
-      role: "user",
-      text: item.question
-    })).flatMap((q, i) => ([
-      { role: "user", text: res.data[i].question },
-      { role: "ai", text: res.data[i].answer }
-    ]));
+    try {
+      const res = await api.get("/chat/sessions", {
+        params: { username, documentId: docId },
+      });
+      setSessions(res.data || []);
+    } catch (e) {
+      console.log(e);
+    }
+  };
 
-    setMessages(formatted);
+  // ================= FETCH CHAT =================
+  const fetchChatHistory = async (sessionId) => {
+    if (!sessionId) return;
 
-  } catch (e) {
-    console.log(e);
-  }
-};
+    try {
+      const res = await api.get("/chat/history", {
+        params: { sessionId },
+      });
+
+      const formatted = res.data.flatMap((item) => [
+        { role: "user", text: item.question },
+        { role: "ai", text: item.answer },
+      ]);
+
+      setMessages(formatted);
+
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  // ================= DOC CHANGE =================
+  useEffect(() => {
+    if (selectedDocId) {
+      fetchSessions(selectedDocId);
+      setMessages([]);
+      setSelectedSessionId("");
+    }
+  }, [selectedDocId]);
+
+  // ================= SESSION CHANGE =================
+  useEffect(() => {
+    if (selectedSessionId) {
+      fetchChatHistory(selectedSessionId);
+    }
+  }, [selectedSessionId]);
+
+  // ================= CREATE SESSION =================
+  const createSession = async () => {
+    if (!selectedDocId) {
+      alert("Select document first");
+      return;
+    }
+
+    try {
+      const res = await api.post("/chat/session/create", null, {
+        params: { username, documentId: selectedDocId },
+      });
+
+      fetchSessions(selectedDocId);
+      setSelectedSessionId(res.data.id);
+
+    } catch {
+      alert("Create session failed");
+    }
+  };
+
   // ================= AUTH =================
   const handleAuth = async () => {
     try {
@@ -109,6 +162,11 @@ export default function App() {
       return;
     }
 
+    if (!selectedSessionId) {
+      alert("Create chat first");
+      return;
+    }
+
     const q = question;
     setQuestion("");
 
@@ -119,8 +177,8 @@ export default function App() {
       const res = await api.post("/chat/ask", null, {
         params: {
           question: q,
-          username,
           documentId: selectedDocId,
+          sessionId: selectedSessionId,
         },
       });
 
@@ -132,14 +190,14 @@ export default function App() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: " Error" },
+        { role: "ai", text: "Error" },
       ]);
     }
 
     setLoading(false);
   };
 
-  // ================= ENTER KEY =================
+  // ================= ENTER =================
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -176,9 +234,6 @@ export default function App() {
       alert("Delete failed");
     }
   };
-
-  // ================= CLEAR CHAT =================
-  const clearChat = () => setMessages([]);
 
   // ================= LOGOUT =================
   const logout = () => {
@@ -230,9 +285,9 @@ export default function App() {
               className="mt-4 text-center text-blue-600 cursor-pointer"
               onClick={() => setIsLogin(!isLogin)}
             >
-              new account   Register
+              {isLogin ? "Create account" : "Already have account?"}
             </p>
-            
+
           </div>
         </div>
       </div>
@@ -246,8 +301,8 @@ export default function App() {
       {/* SIDEBAR */}
       <div className="w-64 bg-black p-4 flex flex-col">
 
-        <button onClick={clearChat} className="bg-blue-600 p-2 rounded mb-3">
-          New Chat
+        <button onClick={createSession} className="bg-blue-600 p-2 rounded mb-3">
+          + New Chat
         </button>
 
         <input type="file" onChange={uploadFile} />
@@ -265,11 +320,15 @@ export default function App() {
           ))}
         </select>
 
-        <div className="mt-4 space-y-2">
-          {documents.map((d) => (
-            <div key={d.id} className="flex justify-between text-sm">
-              <span>{d.fileName}</span>
-              <button onClick={() => deleteDoc(d.id)}>❌</button>
+        {/* 🔥 SESSIONS */}
+        <div className="mt-3 space-y-2">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              onClick={() => setSelectedSessionId(s.id)}
+              className="bg-gray-800 p-2 cursor-pointer"
+            >
+              {s.name || "New Chat"}
             </div>
           ))}
         </div>
@@ -303,7 +362,6 @@ export default function App() {
           <div ref={chatEndRef}></div>
         </div>
 
-        {/* INPUT */}
         <div className="p-3 flex gap-2">
 
           <textarea
@@ -311,18 +369,15 @@ export default function App() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something... (Enter to send)"
+            placeholder="Ask something..."
             rows={2}
           />
 
           <button
             onClick={sendMessage}
-            disabled={loading}
-            className={`px-6 rounded ${
-              loading ? "bg-gray-500" : "bg-blue-600"
-            }`}
+            className="px-6 bg-blue-600 rounded"
           >
-            {loading ? "..." : "Send"}
+            Send
           </button>
 
         </div>
