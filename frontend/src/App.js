@@ -28,7 +28,6 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState("");
 
-  // 🔥 CHAT SESSIONS
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
 
@@ -36,27 +35,51 @@ export default function App() {
   const [question, setQuestion] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
   const chatEndRef = useRef(null);
+
+  // ================= AUTH FUNCTION =================
+  const handleAuth = async () => {
+    if (!username || !password) {
+      alert("Enter username & password");
+      return;
+    }
+
+    try {
+      const endpoint = isLogin ? "/auth/login" : "/auth/register";
+
+      const res = await api.post(endpoint, {
+        username,
+        password,
+      });
+
+      if (isLogin) {
+        const token = res.data.token;
+        localStorage.setItem("token", token);
+        localStorage.setItem("username", username);
+        setToken(token);
+      } else {
+        alert("Registered successfully");
+        setIsLogin(true);
+      }
+
+    } catch (err) {
+      alert("Auth failed");
+    }
+  };
 
   // ================= AUTO SCROLL =================
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ================= FETCH DOCUMENTS =================
+  // ================= FETCH DOCS =================
   const fetchDocuments = async () => {
-    if (!username) return;
-
     try {
       const res = await api.get("/documents/history", {
         params: { username },
       });
       setDocuments(res.data || []);
-    } catch (e) {
-      console.log(e);
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -65,22 +88,16 @@ export default function App() {
 
   // ================= FETCH SESSIONS =================
   const fetchSessions = async (docId) => {
-    if (!docId) return;
-
     try {
       const res = await api.get("/chat/sessions", {
         params: { username, documentId: docId },
       });
       setSessions(res.data || []);
-    } catch (e) {
-      console.log(e);
-    }
+    } catch {}
   };
 
   // ================= FETCH CHAT =================
   const fetchChatHistory = async (sessionId) => {
-    if (!sessionId) return;
-
     try {
       const res = await api.get("/chat/history", {
         params: { sessionId },
@@ -93,12 +110,10 @@ export default function App() {
 
       setMessages(formatted);
 
-    } catch (e) {
-      console.log(e);
-    }
+    } catch {}
   };
 
-  // ================= DOCUMENT CHANGE =================
+  // ================= DOC CHANGE =================
   useEffect(() => {
     if (selectedDocId) {
       fetchSessions(selectedDocId);
@@ -116,58 +131,31 @@ export default function App() {
 
   // ================= CREATE SESSION =================
   const createSession = async () => {
-    try {
-      const res = await api.post("/chat/session/create", null, {
-        params: { username, documentId: selectedDocId },
-      });
+    const res = await api.post("/chat/session/create", null, {
+      params: { username, documentId: selectedDocId },
+    });
 
-      fetchSessions(selectedDocId);
-      setSelectedSessionId(res.data.id);
-
-    } catch {
-      alert("Create session failed");
-    }
-  };
-
-  // ================= RENAME SESSION =================
-  const renameSession = async (id) => {
-    const name = prompt("Enter new name:");
-    if (!name) return;
-
-    try {
-      await api.put("/chat/session/rename", null, {
-        params: { sessionId: id, name },
-      });
-
-      fetchSessions(selectedDocId);
-
-    } catch {
-      alert("Rename failed");
-    }
+    fetchSessions(selectedDocId);
+    setSelectedSessionId(res.data.id);
   };
 
   // ================= DELETE SESSION =================
   const deleteSession = async (id) => {
-    try {
-      await api.delete(`/chat/session/delete/${id}`);
-      fetchSessions(selectedDocId);
+    await api.delete(`/chat/session/delete/${id}`);
+    fetchSessions(selectedDocId);
 
-      if (selectedSessionId === id) {
-        setMessages([]);
-        setSelectedSessionId("");
-      }
-
-    } catch {
-      alert("Delete failed");
+    if (selectedSessionId === id) {
+      setMessages([]);
+      setSelectedSessionId("");
     }
   };
 
-  // ================= SEND MESSAGE =================
+  // ================= SEND =================
   const sendMessage = async () => {
     if (!question.trim()) return;
 
     if (!selectedSessionId) {
-      alert("Create or select chat first");
+      alert("Select chat first");
       return;
     }
 
@@ -179,19 +167,13 @@ export default function App() {
 
     try {
       const res = await api.post("/chat/ask", null, {
-        params: { question: q, sessionId: selectedSessionId },
+        params: { question: q, documentId: selectedDocId, sessionId: selectedSessionId },
       });
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: res.data },
-      ]);
+      setMessages((prev) => [...prev, { role: "ai", text: res.data }]);
 
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", text: "Error" },
-      ]);
+      setMessages((prev) => [...prev, { role: "ai", text: "Error" }]);
     }
 
     setLoading(false);
@@ -205,24 +187,6 @@ export default function App() {
     }
   };
 
-  // ================= UPLOAD =================
-  const uploadFile = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("username", username);
-
-    try {
-      setUploading(true);
-      await api.post("/documents/upload", formData);
-      fetchDocuments();
-    } finally {
-      setUploading(false);
-    }
-  };
-
   // ================= LOGOUT =================
   const logout = () => {
     localStorage.clear();
@@ -230,7 +194,7 @@ export default function App() {
     setMessages([]);
   };
 
-  // ================= LOGIN =================
+  // ================= LOGIN UI =================
   if (!token) {
     return (
       <div className="flex h-screen justify-center items-center">
@@ -248,9 +212,17 @@ export default function App() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
+
           <button onClick={handleAuth} className="w-full bg-blue-600 text-white p-2">
-            Login
+            {isLogin ? "Login" : "Register"}
           </button>
+
+          <p
+            className="text-blue-500 mt-2 cursor-pointer"
+            onClick={() => setIsLogin(!isLogin)}
+          >
+            {isLogin ? "Create account" : "Already have account?"}
+          </p>
         </div>
       </div>
     );
@@ -263,10 +235,6 @@ export default function App() {
       {/* SIDEBAR */}
       <div className="w-72 bg-black p-4 flex flex-col">
 
-        <button onClick={createSession} className="bg-blue-600 p-2 mb-3">
-          + New Chat
-        </button>
-
         <select
           className="text-black p-2 mb-3"
           onChange={(e) => setSelectedDocId(e.target.value)}
@@ -277,17 +245,17 @@ export default function App() {
           ))}
         </select>
 
-        {/* CHAT SESSIONS */}
+        <button onClick={createSession} className="bg-blue-600 p-2 mb-3">
+          + New Chat
+        </button>
+
         <div className="flex-1 overflow-y-auto">
           {sessions.map((s) => (
             <div key={s.id} className="flex justify-between bg-gray-800 p-2 mb-2">
               <span onClick={() => setSelectedSessionId(s.id)}>
                 {s.name || "New Chat"}
               </span>
-              <div>
-                <button onClick={() => renameSession(s.id)}>✏</button>
-                <button onClick={() => deleteSession(s.id)}>❌</button>
-              </div>
+              <button onClick={() => deleteSession(s.id)}>❌</button>
             </div>
           ))}
         </div>
