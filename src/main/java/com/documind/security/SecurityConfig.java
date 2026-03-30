@@ -18,7 +18,7 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
 
             // ✅ VERY IMPORTANT
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .cors(cors -> {})
 
             .authorizeHttpRequests(auth -> auth
 
