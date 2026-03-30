@@ -24,65 +24,59 @@ public class RagService {
         this.embeddingRepository = embeddingRepository;
         this.chatModel = chatModel;
     }
+      public String ask(String question, Long documentId) {
 
-    public String ask(String question, Long documentId) {
+    try {
+        System.out.println("🔥 ===== RAG STARTED =====");
+        System.out.println("❓ Question: " + question);
 
-        try {
-            float[] queryVector = embeddingService.embed(question).vector();
+        float[] queryVector = embeddingService.embed(question).vector();
 
-            List<DocumentEmbedding> embeddings =
-                    embeddingRepository.findByDocumentId(documentId);
+        List<DocumentEmbedding> embeddings =
+                embeddingRepository.findByDocumentId(documentId);
 
-            if (embeddings.isEmpty()) {
-                return "Not found in document";
-            }
-
-            List<ScoredChunk> scored = embeddings.stream()
-                    .map(e -> new ScoredChunk(
-                            e.getChunkText(),
-                            cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
-                    ))
-                    .sorted((a, b) -> Float.compare(b.score, a.score))
-                    .collect(Collectors.toList());
-
-            float maxScore = scored.get(0).score;
-
-            float threshold = Math.max(0.7f, maxScore - 0.05f);
-
-            List<String> topChunks = scored.stream()
-                    .filter(c -> c.score >= threshold)
-                    .limit(3)
-                    .map(c -> c.text)
-                    .collect(Collectors.toList());
-
-            if (topChunks.isEmpty()) {
-                return "Not found in document";
-            }
-
-            String context = topChunks.stream()
-                    .filter(s -> s.length() > 20)
-                    .collect(Collectors.joining("\n\n"));
-
-            String prompt =
-                    "Answer ONLY from context.\n" +
-                    "If not present → reply: Not found in document.\n\n" +
-                    "Context:\n" + context +
-                    "\n\nQuestion:\n" + question;
-
-            String answer = chatModel.generate(prompt);
-
-            if (answer == null || answer.trim().isEmpty()) {
-                return "Not found in document";
-            }
-
-            return answer;
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "Error";
+        if (embeddings.isEmpty()) {
+            return "No data found in document";
         }
-    }
 
+        List<ScoredChunk> scoredChunks = embeddings.stream()
+                .map(e -> new ScoredChunk(
+                        e.getChunkText(),
+                        cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
+                ))
+                .sorted((a, b) -> Float.compare(b.score, a.score))
+                .collect(Collectors.toList());
+
+        // 🔥 DEBUG (VERY IMPORTANT)
+        System.out.println("🔥 Max Score: " + scoredChunks.get(0).score);
+
+        // ✅ TAKE TOP 5 ALWAYS (NO STRICT FILTER)
+        List<String> topChunks = scoredChunks.stream()
+                .limit(5)
+                .map(c -> c.text)
+                .collect(Collectors.toList());
+
+        String context = String.join("\n\n", topChunks);
+
+        System.out.println("📄 Context:\n" + context);
+
+        // 🔥 BETTER PROMPT
+        String prompt =
+                "Answer ONLY from the context below.\n" +
+                "If answer is not present, say: Not found in document.\n\n" +
+                "Context:\n" + context +
+                "\n\nQuestion:\n" + question +
+                "\n\nAnswer:";
+
+        String answer = chatModel.generate(prompt);
+
+        return answer;
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return "Error: " + e.getMessage();
+    }
+}
     private float cosineSimilarity(float[] a, float[] b) {
         float dot = 0, normA = 0, normB = 0;
 
