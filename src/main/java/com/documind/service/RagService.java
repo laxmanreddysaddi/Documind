@@ -24,7 +24,7 @@ public class RagService {
         this.embeddingRepository = embeddingRepository;
         this.chatModel = chatModel;
     }
-      public String ask(String question, Long documentId) {
+    public String ask(String question, Long documentId) {
 
     try {
         System.out.println("🔥 ===== RAG STARTED =====");
@@ -35,7 +35,6 @@ public class RagService {
 
         System.out.println("❓ Question: " + cleanQuestion);
 
-        // ================= FETCH EMBEDDINGS =================
         List<DocumentEmbedding> embeddings =
                 embeddingRepository.findByDocumentId(documentId);
 
@@ -43,44 +42,51 @@ public class RagService {
             return "Not found in document";
         }
 
-        // ================= KEYWORD MATCH CHECK =================
-        List<DocumentEmbedding> matchedChunks = embeddings.stream()
+        // ================= STEP 1: FILTER BY KEYWORD =================
+        List<DocumentEmbedding> matched = embeddings.stream()
                 .filter(e -> {
                     String text = e.getChunkText().toLowerCase();
 
-                    // full match
                     if (text.contains(cleanQuestion)) return true;
 
-                    // partial word match
                     for (String word : cleanQuestion.split(" ")) {
                         if (text.contains(word)) return true;
                     }
-
                     return false;
                 })
                 .toList();
 
-        // 🚨 NO MATCH → STOP HERE
-        if (matchedChunks.isEmpty()) {
+        if (matched.isEmpty()) {
             return "Not found in document";
         }
 
-        // ================= TAKE TOP 3 MATCHES =================
-        List<String> contextChunks = matchedChunks.stream()
-                .limit(3)
-                .map(DocumentEmbedding::getChunkText)
+        // ================= STEP 2: RANK USING EMBEDDING =================
+        float[] queryVector = embeddingService.embed(cleanQuestion).vector();
+
+        List<ScoredChunk> ranked = matched.stream()
+                .map(e -> new ScoredChunk(
+                        e.getChunkText(),
+                        cosineSimilarity(queryVector, stringToVector(e.getEmbedding()))
+                ))
+                .sorted((a, b) -> Float.compare(b.score, a.score))
                 .toList();
 
-        String context = String.join("\n\n", contextChunks);
+        // ================= STEP 3: TAKE BEST 2 =================
+        List<String> bestChunks = ranked.stream()
+                .limit(2)   // 🔥 VERY IMPORTANT (less noise)
+                .map(c -> c.text)
+                .toList();
+
+        String context = String.join("\n\n", bestChunks);
 
         System.out.println("📄 FINAL CONTEXT:\n" + context);
 
         // ================= PROMPT =================
         String prompt =
                 "You are DocuMind AI.\n\n" +
-                "Answer ONLY from the given context.\n" +
-                "Do NOT guess.\n" +
-                "If answer is not clearly present, say: Not found in document.\n\n" +
+                "Answer ONLY from the context.\n" +
+                "Give direct answer.\n" +
+                "Do NOT include unrelated content.\n\n" +
                 "Context:\n" + context +
                 "\n\nQuestion:\n" + cleanQuestion +
                 "\n\nAnswer:";
