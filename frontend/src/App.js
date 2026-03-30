@@ -28,7 +28,6 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [selectedDocId, setSelectedDocId] = useState("");
 
-  // 🔥 NEW (sessions)
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
 
@@ -53,9 +52,7 @@ export default function App() {
         params: { username },
       });
       setDocuments(res.data || []);
-    } catch (e) {
-      console.log(e);
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -71,9 +68,7 @@ export default function App() {
         params: { username, documentId: docId },
       });
       setSessions(res.data || []);
-    } catch (e) {
-      console.log(e);
-    }
+    } catch {}
   };
 
   // ================= FETCH CHAT =================
@@ -91,10 +86,7 @@ export default function App() {
       ]);
 
       setMessages(formatted);
-
-    } catch (e) {
-      console.log(e);
-    }
+    } catch {}
   };
 
   // ================= DOC CHANGE =================
@@ -125,8 +117,9 @@ export default function App() {
         params: { username, documentId: selectedDocId },
       });
 
-      fetchSessions(selectedDocId);
       setSelectedSessionId(res.data.id);
+      setMessages([]); // clear UI
+      fetchSessions(selectedDocId);
 
     } catch {
       alert("Create session failed");
@@ -153,7 +146,7 @@ export default function App() {
     }
   };
 
-  // ================= CHAT =================
+  // ================= 🔥 FIXED CHAT =================
   const sendMessage = async () => {
     if (!question.trim()) return;
 
@@ -162,9 +155,23 @@ export default function App() {
       return;
     }
 
-    if (!selectedSessionId) {
-      alert("Create chat first");
-      return;
+    let sessionId = selectedSessionId;
+
+    // 🔥 AUTO CREATE SESSION
+    if (!sessionId) {
+      try {
+        const res = await api.post("/chat/session/create", null, {
+          params: { username, documentId: selectedDocId },
+        });
+
+        sessionId = res.data.id;
+        setSelectedSessionId(sessionId);
+        fetchSessions(selectedDocId);
+
+      } catch {
+        alert("Failed to create session");
+        return;
+      }
     }
 
     const q = question;
@@ -178,7 +185,7 @@ export default function App() {
         params: {
           question: q,
           documentId: selectedDocId,
-          sessionId: selectedSessionId,
+          sessionId: sessionId,
         },
       });
 
@@ -225,16 +232,6 @@ export default function App() {
     }
   };
 
-  // ================= DELETE =================
-  const deleteDoc = async (id) => {
-    try {
-      await api.delete(`/documents/delete/${id}`);
-      fetchDocuments();
-    } catch {
-      alert("Delete failed");
-    }
-  };
-
   // ================= LOGOUT =================
   const logout = () => {
     localStorage.clear();
@@ -247,14 +244,12 @@ export default function App() {
   if (!token) {
     return (
       <div className="flex h-screen">
-
         <div className="w-1/2 bg-blue-600 flex items-center justify-center text-white text-4xl font-bold">
           DocuMind AI
         </div>
 
         <div className="w-1/2 flex items-center justify-center bg-gray-100">
           <div className="bg-white p-8 rounded-xl shadow-lg w-80">
-
             <h2 className="text-2xl font-bold mb-6 text-center">
               {isLogin ? "Login" : "Register"}
             </h2>
@@ -287,7 +282,6 @@ export default function App() {
             >
               {isLogin ? "Create account" : "Already have account?"}
             </p>
-
           </div>
         </div>
       </div>
@@ -306,7 +300,6 @@ export default function App() {
         </button>
 
         <input type="file" onChange={uploadFile} />
-        {uploading && <p className="text-sm mt-2">Uploading...</p>}
 
         <select
           className="text-black mt-3 p-1 rounded"
@@ -326,7 +319,11 @@ export default function App() {
             <div
               key={s.id}
               onClick={() => setSelectedSessionId(s.id)}
-              className="bg-gray-800 p-2 cursor-pointer"
+              className={`p-2 cursor-pointer rounded ${
+                selectedSessionId === s.id
+                  ? "bg-blue-600"
+                  : "bg-gray-800"
+              }`}
             >
               {s.name || "New Chat"}
             </div>
