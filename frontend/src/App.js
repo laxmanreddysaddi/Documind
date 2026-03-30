@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import jsPDF from "jspdf";
+
 
 const BASE_URL =
   process.env.REACT_APP_API_URL ||
@@ -190,20 +190,6 @@ export default function App() {
 
     recognition.start();
   };
-
-  // ================= EXPORT PDF =================
-  const exportPDF = () => {
-    const doc = new jsPDF();
-    let y = 10;
-
-    messages.forEach((m) => {
-      doc.text(`${m.role === "user" ? "Q" : "A"}: ${m.text}`, 10, y);
-      y += 10;
-    });
-
-    doc.save("chat.pdf");
-  };
-
   // ================= DELETE DOC =================
   const deleteDocument = async (id) => {
     await api.delete(`/documents/delete/${id}`);
@@ -306,8 +292,6 @@ export default function App() {
 
           <button onClick={sendMessage} className="bg-blue-500 px-4">Send</button>
           <button onClick={startVoice} className="bg-purple-500 px-4">🎤</button>
-          <button onClick={exportPDF} className="bg-green-500 px-4">PDF</button>
-
         </div>
 
         {/* Suggestions */}
