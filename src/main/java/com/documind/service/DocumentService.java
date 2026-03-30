@@ -80,10 +80,17 @@ public class DocumentService {
             // =========================
             // 🔥 CLEAN TEXT
             // =========================
-            content = content
-                    .replaceAll("\\s+", " ")
-                    .replaceAll("[^a-zA-Z0-9.,!? ]", " ")
-                    .trim();
+           content = content
+    // fix broken words (add space before capital letters)
+    .replaceAll("([a-z])([A-Z])", "$1 $2")
+
+    // normalize spaces
+    .replaceAll("\\s+", " ")
+
+    // keep important chars
+    .replaceAll("[^a-zA-Z0-9.,!? ]", " ")
+
+    .trim();
 
             System.out.println("📄 Clean length: " + content.length());
 
