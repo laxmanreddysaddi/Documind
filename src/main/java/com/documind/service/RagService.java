@@ -82,35 +82,22 @@ public class RagService {
         System.out.println("📄 FINAL CONTEXT:\n" + context);
 
         // ================= PROMPT =================
-       String prompt =
-        "You are DocuMind AI.\n\n" +
-        "STRICT RULES:\n" +
-        "1. Answer ONLY using the context.\n" +
-        "2. Give SHORT and CLEAR answer (max 3-4 lines).\n" +
-        "3. Do NOT repeat unnecessary info.\n" +
-        "4. Do NOT include unrelated content.\n" +
-        "5. If answer not found, say: Not found in document.\n\n" +
-        "Context:\n" + context +
-        "\n\nQuestion:\n" + cleanQuestion +
-        "\n\nAnswer:";
+        String prompt =
+                "You are DocuMind AI.\n\n" +
+                "Answer ONLY from the context.\n" +
+                "Give direct answer.\n" +
+                "Do NOT include unrelated content.\n\n" +
+                "Context:\n" + context +
+                "\n\nQuestion:\n" + cleanQuestion +
+                "\n\nAnswer:";
 
-String answer = chatModel.generate(prompt);
+        String answer = chatModel.generate(prompt);
 
-// 🔥 CLEAN OUTPUT
-if (answer == null || answer.trim().isEmpty()) {
-    return "Not found in document";
-}
+        if (answer == null || answer.trim().isEmpty()) {
+            return "Not found in document";
+        }
 
-// remove garbage lines
-answer = answer.replaceAll("(?i)based on the context.*", "");
-answer = answer.replaceAll("(?i)the given context.*", "");
-
-// 🔥 LIMIT LENGTH
-if (answer.length() > 300) {
-    answer = answer.substring(0, 300) + "...";
-}
-
-return answer.trim();
+        return answer.trim();
 
     } catch (Exception e) {
         e.printStackTrace();
