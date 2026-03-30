@@ -46,7 +46,6 @@ export default function App() {
   // ================= FETCH DOCUMENTS =================
   const fetchDocuments = async () => {
     if (!username) return;
-
     try {
       const res = await api.get("/documents/history", {
         params: { username },
@@ -62,7 +61,6 @@ export default function App() {
   // ================= FETCH SESSIONS =================
   const fetchSessions = async (docId) => {
     if (!docId) return;
-
     try {
       const res = await api.get("/chat/sessions", {
         params: { username, documentId: docId },
@@ -74,7 +72,6 @@ export default function App() {
   // ================= FETCH CHAT =================
   const fetchChatHistory = async (sessionId) => {
     if (!sessionId) return;
-
     try {
       const res = await api.get("/chat/history", {
         params: { sessionId },
@@ -105,32 +102,15 @@ export default function App() {
     }
   }, [selectedSessionId]);
 
-  // ================= CREATE SESSION =================
-  const createSession = async () => {
-    if (!selectedDocId) {
-      alert("Select document first");
-      return;
-    }
-
-    try {
-      const res = await api.post("/chat/session/create", null, {
-        params: { username, documentId: selectedDocId },
-      });
-
-      setSelectedSessionId(res.data.id);
-      setMessages([]);
-      fetchSessions(selectedDocId);
-
-    } catch {
-      alert("Create session failed");
-    }
+  // ================= NEW CHAT =================
+  const createSession = () => {
+    setSelectedSessionId("");
+    setMessages([]);
   };
 
   // ================= DELETE DOCUMENT =================
   const deleteDocument = async (id) => {
-
-    const confirmDelete = window.confirm("Delete this document?");
-    if (!confirmDelete) return;
+    if (!window.confirm("Delete this document?")) return;
 
     try {
       await api.delete(`/documents/delete/${id}`);
@@ -142,7 +122,6 @@ export default function App() {
       }
 
       fetchDocuments();
-
     } catch {
       alert("Delete failed");
     }
@@ -178,22 +157,32 @@ export default function App() {
     }
 
     let sessionId = selectedSessionId;
+    const q = question;
 
-    const q = question; // 🔥 IMPORTANT
-
+    // 🔥 CREATE SESSION ONLY IF NOT EXISTS
     if (!sessionId) {
       try {
         const res = await api.post("/chat/session/create", null, {
           params: {
             username,
             documentId: selectedDocId,
-            question: q // 🔥 AUTO NAME FIX
+            question: q,
           },
         });
 
         sessionId = res.data.id;
         setSelectedSessionId(sessionId);
-        fetchSessions(selectedDocId);
+
+        // 🔥 INSTANT UI UPDATE
+        const cleanName = q.replace(/\s+/g, " ").trim().substring(0, 30);
+
+        setSessions((prev) => [
+          { id: sessionId, name: cleanName },
+          ...prev,
+        ]);
+
+        // 🔥 SYNC BACKEND
+        setTimeout(() => fetchSessions(selectedDocId), 300);
 
       } catch {
         alert("Failed to create session");
@@ -202,7 +191,6 @@ export default function App() {
     }
 
     setQuestion("");
-
     setMessages((prev) => [...prev, { role: "user", text: q }]);
     setLoading(true);
 
@@ -321,7 +309,7 @@ export default function App() {
         <div className="mt-3 space-y-2">
           {documents.map((d) => (
             <div key={d.id}
-              className={`p-2 rounded flex justify-between items-center backdrop-blur-md ${
+              className={`p-2 rounded flex justify-between items-center ${
                 selectedDocId == d.id ? "bg-blue-500/40" : "bg-white/10"
               }`}
             >
@@ -343,7 +331,7 @@ export default function App() {
           {sessions.map((s) => (
             <div key={s.id}
               onClick={() => setSelectedSessionId(s.id)}
-              className={`p-2 rounded cursor-pointer backdrop-blur-md ${
+              className={`p-2 rounded cursor-pointer ${
                 selectedSessionId === s.id ? "bg-blue-500/40" : "bg-white/10"
               }`}
             >
@@ -365,7 +353,7 @@ export default function App() {
 
           {messages.map((m, i) => (
             <div key={i}
-              className={`p-3 rounded-xl max-w-xl backdrop-blur-md ${
+              className={`p-3 rounded-xl max-w-xl ${
                 m.role === "user"
                   ? "bg-blue-500/40 ml-auto"
                   : "bg-white/10"
@@ -376,7 +364,6 @@ export default function App() {
           ))}
 
           {loading && <p>Thinking...</p>}
-
           <div ref={chatEndRef}></div>
         </div>
 
