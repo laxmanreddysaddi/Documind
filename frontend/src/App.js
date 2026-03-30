@@ -143,7 +143,7 @@ export default function App() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "❌ Error" },
+        { role: "ai", text: "Error" },
       ]);
     }
 
@@ -287,7 +287,7 @@ export default function App() {
           {documents.map((d) => (
             <div key={d.id} className="flex justify-between text-sm">
               <span>{d.fileName}</span>
-              <button onClick={() => deleteDoc(d.id)}>❌</button>
+              <button onClick={() => deleteDoc(d.id)}> Delete</button>
             </div>
           ))}
         </div>
@@ -329,7 +329,7 @@ export default function App() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something... (Enter to send)"
+            placeholder="Ask something... "
             rows={2}
           />
 
