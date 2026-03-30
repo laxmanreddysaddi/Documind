@@ -27,15 +27,16 @@ public class ChatController {
 
     // ================= SESSION =================
 
-    @PostMapping("/session/create")
-    public ResponseEntity<?> createSession(
-            @RequestParam String username,
-            @RequestParam Long documentId
-    ) {
-        return ResponseEntity.ok(
-                sessionService.create(username, documentId)
-        );
-    }
+   @PostMapping("/session/create")
+public ResponseEntity<?> createSession(
+        @RequestParam String username,
+        @RequestParam Long documentId,
+        @RequestParam(required = false) String question
+) {
+    return ResponseEntity.ok(
+        sessionService.create(username, documentId, question)
+    );
+}
 
     @GetMapping("/sessions")
     public ResponseEntity<?> getSessions(

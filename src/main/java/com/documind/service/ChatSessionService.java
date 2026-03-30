@@ -16,16 +16,25 @@ public class ChatSessionService {
         this.repo = repo;
     }
 
-    public ChatSession create(String username, Long documentId) {
+    public ChatSession create(String username, Long documentId, String firstQuestion) {
 
-        ChatSession session = new ChatSession();
-        session.setUsername(username);
-        session.setDocumentId(documentId);
-        session.setCreatedAt(LocalDateTime.now());
+    ChatSession session = new ChatSession();
+    session.setUsername(username);
+    session.setDocumentId(documentId);
+    session.setCreatedAt(LocalDateTime.now());
+
+    // 🔥 AUTO NAME FROM QUESTION
+    if (firstQuestion != null && !firstQuestion.isBlank()) {
+        String name = firstQuestion.length() > 30
+                ? firstQuestion.substring(0, 30) + "..."
+                : firstQuestion;
+        session.setName(name);
+    } else {
         session.setName("New Chat");
-
-        return repo.save(session);
     }
+
+    return repo.save(session);
+}
 
     public List<ChatSession> getSessions(String username, Long documentId) {
         return repo.findByUsernameAndDocumentIdOrderByCreatedAtDesc(username, documentId);
