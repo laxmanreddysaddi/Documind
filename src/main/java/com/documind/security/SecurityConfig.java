@@ -17,15 +17,15 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
 
-            // ✅ ENABLE CORS
-            .cors(cors -> {})
+            // 🔥 FIXED CORS (IMPORTANT)
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
             .authorizeHttpRequests(auth -> auth
 
                 // ✅ allow preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // ✅ allow ALL APIs (for now)
+                // ✅ allow APIs
                 .requestMatchers("/api/**").permitAll()
 
                 .anyRequest().permitAll()
@@ -34,7 +34,6 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // ✅ SINGLE CORS CONFIG (FINAL)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
@@ -43,7 +42,6 @@ public class SecurityConfig {
         config.setAllowCredentials(true);
 
         config.setAllowedOriginPatterns(List.of(
-                "http://localhost:3000",
                 "http://localhost:*",
                 "https://*.vercel.app"
         ));
