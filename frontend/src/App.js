@@ -10,6 +10,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// 🔐 Attach token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -39,9 +40,9 @@ export default function App() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ================= FETCH DOCS =================
+  // ================= FETCH DOCUMENTS =================
   const fetchDocuments = async () => {
-    if (!username || username.trim() === "") return;
+    if (!username) return;
 
     try {
       const res = await api.get("/documents/history", {
@@ -54,8 +55,41 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (token) fetchDocuments();
+    if (token) {
+      fetchDocuments();
+    }
   }, [token]);
+
+  // ================= FETCH CHAT (PER DOC) =================
+  const fetchChatHistory = async (docId) => {
+    if (!username || !docId) return;
+
+    try {
+      const res = await api.get("/chat/history", {
+        params: {
+          username,
+          documentId: docId,
+        },
+      });
+
+      const formatted = res.data.flatMap((item) => [
+        { role: "user", text: item.question },
+        { role: "ai", text: item.answer },
+      ]);
+
+      setMessages(formatted);
+
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  // 🔥 LOAD WHEN DOCUMENT CHANGES
+  useEffect(() => {
+    if (selectedDocId) {
+      fetchChatHistory(selectedDocId);
+    }
+  }, [selectedDocId]);
 
   // ================= AUTH =================
   const handleAuth = async () => {
@@ -144,18 +178,24 @@ export default function App() {
     }
   };
 
-  // ================= DELETE =================
+  // ================= DELETE DOC =================
   const deleteDoc = async (id) => {
     try {
       await api.delete(`/documents/delete/${id}`);
       fetchDocuments();
+      if (selectedDocId === id) {
+        setMessages([]);
+        setSelectedDocId("");
+      }
     } catch {
       alert("Delete failed");
     }
   };
 
   // ================= CLEAR CHAT =================
-  const clearChat = () => setMessages([]);
+  const clearChat = () => {
+    setMessages([]);
+  };
 
   // ================= LOGOUT =================
   const logout = () => {
@@ -207,7 +247,7 @@ export default function App() {
               className="mt-4 text-center text-blue-600 cursor-pointer"
               onClick={() => setIsLogin(!isLogin)}
             >
-              Switch
+              Create new account
             </p>
 
           </div>
@@ -232,9 +272,10 @@ export default function App() {
 
         <select
           className="text-black mt-3 p-1 rounded"
+          value={selectedDocId}
           onChange={(e) => setSelectedDocId(e.target.value)}
         >
-          <option>Select Document</option>
+          <option value="">Select Document</option>
           {documents.map((d) => (
             <option key={d.id} value={d.id}>
               {d.fileName}
@@ -242,7 +283,7 @@ export default function App() {
           ))}
         </select>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2 overflow-y-auto">
           {documents.map((d) => (
             <div key={d.id} className="flex justify-between text-sm">
               <span>{d.fileName}</span>
