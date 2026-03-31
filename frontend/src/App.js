@@ -10,9 +10,13 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// 🔒 session fix
+// 🔥 USER BASED TOKEN
 api.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("token");
+  const currentUser = localStorage.getItem("currentUser");
+  const token = currentUser
+    ? localStorage.getItem(`token_${currentUser}`)
+    : null;
+
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -20,11 +24,15 @@ api.interceptors.request.use((config) => {
 export default function App() {
 
   // ================= AUTH =================
+  const currentUser = localStorage.getItem("currentUser");
+
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState(sessionStorage.getItem("username") || "");
+  const [username, setUsername] = useState(currentUser || "");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState(sessionStorage.getItem("token") || "");
-  const [authLoading, setAuthLoading] = useState(false);
+
+  const [token, setToken] = useState(
+    currentUser ? localStorage.getItem(`token_${currentUser}`) : ""
+  );
 
   // ================= DATA =================
   const [documents, setDocuments] = useState([]);
@@ -37,17 +45,7 @@ export default function App() {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-
   const chatEndRef = useRef(null);
-
-  // ⚡ WAKE BACKEND
-  useEffect(() => {
-    fetch("https://documind-backend-30m4.onrender.com/api/auth/login", {
-      method: "OPTIONS",
-    }).catch(() => {});
-  }, []);
 
   // ================= AUTO SCROLL =================
   useEffect(() => {
@@ -56,6 +54,8 @@ export default function App() {
 
   // ================= FETCH DOCUMENTS =================
   const fetchDocuments = async () => {
+    if (!username) return;
+
     try {
       const res = await api.get("/documents/history", {
         params: { username },
@@ -70,6 +70,8 @@ export default function App() {
 
   // ================= FETCH SESSIONS =================
   const fetchSessions = async (docId) => {
+    if (!docId) return;
+
     try {
       const res = await api.get("/chat/sessions", {
         params: { username, documentId: docId },
@@ -78,8 +80,10 @@ export default function App() {
     } catch {}
   };
 
-  // ================= FETCH HISTORY =================
+  // ================= FETCH CHAT =================
   const fetchChatHistory = async (sessionId) => {
+    if (!sessionId) return;
+
     try {
       const res = await api.get("/chat/history", {
         params: { sessionId },
@@ -116,23 +120,18 @@ export default function App() {
 
   // ================= DELETE DOC =================
   const deleteDocument = async (id) => {
-    if (!window.confirm("Delete?")) return;
+    if (!window.confirm("Delete document?")) return;
 
     await api.delete(`/documents/delete/${id}`);
-
-    if (selectedDocId === id) {
-      setSelectedDocId("");
-      setMessages([]);
-    }
-
     fetchDocuments();
   };
 
   // ================= AUTH =================
   const handleAuth = async () => {
-    if (!username || !password) return alert("Enter details");
-
-    setAuthLoading(true);
+    if (!username || !password) {
+      alert("Enter username & password");
+      return;
+    }
 
     try {
       const url = isLogin ? "/auth/login" : "/auth/register";
@@ -140,9 +139,12 @@ export default function App() {
 
       if (isLogin) {
         const t = res.data.token || res.data;
+
         setToken(t);
-        sessionStorage.setItem("token", t);
-        sessionStorage.setItem("username", username);
+
+        localStorage.setItem(`token_${username}`, t);
+        localStorage.setItem("currentUser", username);
+
       } else {
         alert("Registered! Now login");
         setIsLogin(true);
@@ -151,14 +153,16 @@ export default function App() {
     } catch {
       alert("Auth failed");
     }
-
-    setAuthLoading(false);
   };
 
-  // ================= CHAT FIXED =================
+  // ================= CHAT =================
   const sendMessage = async () => {
     if (!question.trim()) return;
-    if (!selectedDocId) return alert("Select document");
+
+    if (!selectedDocId) {
+      alert("Select document first");
+      return;
+    }
 
     const q = question;
     setQuestion("");
@@ -170,7 +174,6 @@ export default function App() {
     let sessionId = selectedSessionId;
 
     try {
-      // ✅ create session if first msg
       if (!sessionId) {
         const res = await api.post("/chat/session/create", null, {
           params: { username, documentId: selectedDocId, question: q },
@@ -194,13 +197,14 @@ export default function App() {
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "ai", text: "Error" },
+        { role: "ai", text: "Error getting answer" },
       ]);
     }
 
     setLoading(false);
   };
 
+  // ================= ENTER =================
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -208,56 +212,33 @@ export default function App() {
     }
   };
 
-  // ================= UPLOAD =================
-  const uploadFile = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("username", username);
-
-    setUploading(true);
-
-    try {
-      await api.post("/documents/upload", formData, {
-        onUploadProgress: (e) => {
-          setUploadProgress(Math.round((e.loaded * 100) / e.total));
-        },
-      });
-
-      fetchDocuments();
-
-    } catch {
-      alert("Upload failed");
-    }
-
-    setUploading(false);
-    setUploadProgress(0);
-  };
-
+  // ================= LOGOUT =================
   const logout = () => {
-    sessionStorage.clear();
+    localStorage.removeItem("currentUser");
     setToken("");
     setMessages([]);
+    setDocuments([]);
   };
 
   // ================= LOGIN UI =================
   if (!token) {
     return (
-      <div className="flex h-screen items-center justify-center bg-black text-white">
+      <div className="flex h-screen bg-black text-white items-center justify-center">
         <div className="bg-white/10 p-6 rounded w-80">
+
           <h2 className="text-xl mb-4 text-center">
             {isLogin ? "Login" : "Register"}
           </h2>
 
-          <input className="w-full p-2 mb-3 bg-white/20"
+          <input
+            className="w-full p-2 mb-3 bg-white/20"
             placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
 
-          <input type="password"
+          <input
+            type="password"
             className="w-full p-2 mb-3 bg-white/20"
             placeholder="Password"
             value={password}
@@ -268,13 +249,18 @@ export default function App() {
             onClick={handleAuth}
             className="w-full bg-blue-600 p-2"
           >
-            {authLoading ? "Loading..." : isLogin ? "Login" : "Register"}
+            {isLogin ? "Login" : "Register"}
           </button>
 
-          <p className="text-sm mt-3 text-center cursor-pointer"
-            onClick={() => setIsLogin(!isLogin)}>
-            {isLogin ? "New user? Register" : "Already have account? Login"}
+          <p
+            className="text-sm mt-3 text-center cursor-pointer text-blue-300"
+            onClick={() => setIsLogin(!isLogin)}
+          >
+            {isLogin
+              ? "New user? Register"
+              : "Already have account? Login"}
           </p>
+
         </div>
       </div>
     );
@@ -284,21 +270,18 @@ export default function App() {
   return (
     <div className="flex h-screen bg-black text-white">
 
+      {/* HEADER */}
+      <div className="absolute top-0 w-full text-center p-3 font-bold text-xl bg-white/10">
+        DocuMind AI
+      </div>
+
       {/* SIDEBAR */}
-      <div className="w-64 p-3 bg-white/10">
+      <div className="w-64 p-3 mt-12 bg-white/10">
 
         <button onClick={createSession}
           className="bg-blue-600 w-full p-2 mb-2">
           + New Chat
         </button>
-
-        <input type="file" onChange={uploadFile} />
-
-        {uploading && (
-          <div className="text-xs mt-2">
-            Uploading {uploadProgress}%
-          </div>
-        )}
 
         {documents.map((d) => (
           <div key={d.id} className="flex justify-between mt-2">
@@ -316,7 +299,7 @@ export default function App() {
       </div>
 
       {/* CHAT */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col mt-12">
 
         <div className="flex-1 p-4 overflow-y-auto">
           {messages.map((m, i) => (
@@ -331,6 +314,7 @@ export default function App() {
         <div className="p-3 flex gap-2">
           <textarea
             className="flex-1 p-2 bg-white/20"
+            placeholder="Ask something..."   // ✅ ADDED
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
