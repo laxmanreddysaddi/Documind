@@ -171,6 +171,18 @@ export default function App() {
     setAuthLoading(false);
   };
 
+  // ================= DELETE DOCUMENT =================
+const deleteDocument = async (id) => {
+  if (!window.confirm("Delete document?")) return;
+
+  try {
+    await api.delete(`/documents/delete/${id}`);
+    fetchDocuments(); // refresh list
+  } catch (err) {
+    alert("Delete failed");
+  }
+};
+
   // ================= SEND MESSAGE =================
   const sendMessage = async () => {
     if (!question.trim()) return;
