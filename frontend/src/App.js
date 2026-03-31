@@ -10,7 +10,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// ✅ Attach token per user
+// ✅ Attach token
 api.interceptors.request.use((config) => {
   const currentUser = localStorage.getItem("currentUser");
   const token = currentUser
@@ -24,14 +24,10 @@ api.interceptors.request.use((config) => {
 export default function App() {
 
   // ================= AUTH =================
-  const savedUser = localStorage.getItem("currentUser");
-
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState(savedUser || "");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState(
-    savedUser ? localStorage.getItem(`token_${savedUser}`) : ""
-  );
+  const [token, setToken] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
   // ================= DATA =================
@@ -45,9 +41,11 @@ export default function App() {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [uploading, setUploading] = useState(false);
+
   const chatEndRef = useRef(null);
 
-  // ================= BACKEND WAKE-UP =================
+  // ================= BACKEND WAKE =================
   useEffect(() => {
     fetch(`${BASE_URL}/auth/login`, { method: "OPTIONS" }).catch(() => {});
   }, []);
@@ -72,6 +70,32 @@ export default function App() {
   useEffect(() => {
     if (token) fetchDocuments();
   }, [token]);
+
+  // ================= FILE UPLOAD =================
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("username", username);
+
+    try {
+      await api.post("/documents/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      fetchDocuments();
+    } catch {
+      alert("Upload failed");
+    }
+
+    setUploading(false);
+  };
 
   // ================= FETCH SESSIONS =================
   const fetchSessions = async (docId) => {
@@ -117,20 +141,6 @@ export default function App() {
     }
   }, [selectedSessionId]);
 
-  // ================= NEW CHAT =================
-  const createSession = () => {
-    setSelectedSessionId("");
-    setMessages([]);
-  };
-
-  // ================= DELETE DOC =================
-  const deleteDocument = async (id) => {
-    if (!window.confirm("Delete document?")) return;
-
-    await api.delete(`/documents/delete/${id}`);
-    fetchDocuments();
-  };
-
   // ================= AUTH =================
   const handleAuth = async () => {
     if (!username || !password) {
@@ -161,7 +171,7 @@ export default function App() {
     setAuthLoading(false);
   };
 
-  // ================= CHAT =================
+  // ================= SEND MESSAGE =================
   const sendMessage = async () => {
     if (!question.trim()) return;
 
@@ -187,7 +197,7 @@ export default function App() {
         sessionId = res.data.id;
         setSelectedSessionId(sessionId);
 
-        setTimeout(() => fetchSessions(selectedDocId), 300);
+        fetchSessions(selectedDocId);
       }
 
       const res = await api.post("/chat/ask", null, {
@@ -209,77 +219,56 @@ export default function App() {
     setLoading(false);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
   const logout = () => {
-    localStorage.removeItem("currentUser");
+    localStorage.clear();
     setToken("");
     setMessages([]);
     setDocuments([]);
   };
 
-  // ================= LOGIN UI =================
+  // ================= LOGIN =================
   if (!token) {
     return (
-      <div className="flex h-screen bg-gradient-to-br from-black to-gray-900">
+      <div className="flex h-screen bg-black text-white items-center justify-center">
+        <div className="bg-white/10 p-6 rounded w-80">
 
-        {/* LEFT SIDE */}
-        <div className="w-1/2 flex flex-col items-center justify-center text-white">
-          <h1 className="text-5xl font-bold mb-4">DocuMind AI</h1>
-          <p className="text-gray-400 text-center max-w-sm">
-            Smart document assistant powered by AI.
+          <h2 className="text-xl mb-4 text-center">
+            {isLogin ? "Login" : "Register"}
+          </h2>
+
+          <input
+            className="w-full p-2 mb-3 bg-white/20"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+
+          <input
+            type="password"
+            className="w-full p-2 mb-3 bg-white/20"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <button
+            onClick={handleAuth}
+            className="w-full bg-blue-600 p-2"
+          >
+            {authLoading
+              ? "Please wait..."
+              : isLogin
+              ? "Login"
+              : "Register"}
+          </button>
+
+          <p
+            className="text-sm mt-3 text-center cursor-pointer text-blue-300"
+            onClick={() => setIsLogin(!isLogin)}
+          >
+            Toggle Login/Register
           </p>
-        </div>
 
-        {/* RIGHT SIDE */}
-        <div className="w-1/2 flex items-center justify-center">
-          <div className="backdrop-blur-xl bg-white/10 p-8 rounded-xl w-80 text-white">
-
-            <h2 className="text-2xl mb-6 text-center">
-              {isLogin ? "Login" : "Register"}
-            </h2>
-
-            <input
-              className="w-full p-2 mb-4 bg-white/20"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-
-            <input
-              type="password"
-              className="w-full p-2 mb-4 bg-white/20"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-
-            <button
-              onClick={handleAuth}
-              className="w-full bg-blue-600 p-2 rounded"
-            >
-              {authLoading
-                ? "Please wait..."
-                : isLogin
-                ? "Login"
-                : "Register"}
-            </button>
-
-            <p
-              className="text-sm mt-4 text-center cursor-pointer text-blue-300"
-              onClick={() => setIsLogin(!isLogin)}
-            >
-              {isLogin
-                ? "New user? Register"
-                : "Already have account? Login"}
-            </p>
-
-          </div>
         </div>
       </div>
     );
@@ -289,49 +278,96 @@ export default function App() {
   return (
     <div className="flex h-screen bg-black text-white">
 
-      <div className="w-64 p-3 bg-white/10">
-        <button onClick={createSession}
-          className="bg-blue-600 w-full p-2 mb-2">
+      {/* LEFT PANEL */}
+      <div className="w-64 p-3 bg-white/10 flex flex-col">
+
+        {/* Upload */}
+        <label className="bg-gray-700 p-2 text-center cursor-pointer mb-2">
+          {uploading ? "Uploading..." : "Choose File"}
+          <input type="file" hidden onChange={handleUpload} />
+        </label>
+
+        {/* New Chat */}
+        <button
+          onClick={() => {
+            setSelectedSessionId("");
+            setMessages([]);
+          }}
+          className="bg-blue-600 w-full p-2 mb-3"
+        >
           + New Chat
         </button>
 
+        {/* Documents */}
         {documents.map((d) => (
-          <div key={d.id} className="flex justify-between mt-2">
-            <span onClick={() => setSelectedDocId(d.id)}>
-              {d.fileName}
-            </span>
-            <button onClick={() => deleteDocument(d.id)}>🗑</button>
+          <div
+            key={d.id}
+            onClick={() => {
+              setSelectedDocId(d.id);
+              setSelectedSessionId("");
+              fetchSessions(d.id);
+            }}
+            className={`p-2 cursor-pointer flex justify-between ${
+              selectedDocId === d.id
+                ? "bg-blue-600"
+                : "hover:bg-gray-700"
+            }`}
+          >
+            <span>{d.fileName}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteDocument(d.id);
+              }}
+            >
+              🗑
+            </button>
           </div>
         ))}
 
-        <button onClick={logout}
-          className="bg-red-600 mt-5 w-full p-2">
+        {/* Sessions */}
+        {sessions.map((s) => (
+          <div
+            key={s.id}
+            onClick={() => setSelectedSessionId(s.id)}
+            className="p-2 hover:bg-gray-700 cursor-pointer"
+          >
+            {s.name}
+          </div>
+        ))}
+
+        <button onClick={logout} className="bg-red-600 mt-auto p-2">
           Logout
         </button>
       </div>
 
+      {/* CHAT */}
       <div className="flex-1 flex flex-col">
 
         <div className="flex-1 p-4 overflow-y-auto">
+          {!selectedDocId && (
+            <p className="text-gray-400">
+              👉 Select a document to start chat
+            </p>
+          )}
+
           {messages.map((m, i) => (
-            <div key={i} className="mb-2">
-              {m.text}
-            </div>
+            <div key={i}>{m.text}</div>
           ))}
+
           {loading && <p>Thinking...</p>}
+
           <div ref={chatEndRef}></div>
         </div>
 
         <div className="p-3 flex gap-2">
-          <textarea
+          <input
             className="flex-1 p-2 bg-white/20"
             placeholder="Ask something..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={handleKeyDown}
           />
-          <button onClick={sendMessage}
-            className="bg-blue-600 px-4">
+          <button onClick={sendMessage} className="bg-blue-600 px-4">
             Send
           </button>
         </div>
