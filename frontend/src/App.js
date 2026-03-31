@@ -237,7 +237,7 @@ export default function App() {
             className="text-sm mt-3 text-center cursor-pointer text-blue-300"
             onClick={() => setIsLogin(!isLogin)}
           >
-            Switch
+            New user, Register
           </p>
         </div>
       </div>
@@ -333,11 +333,19 @@ export default function App() {
 
         <div className="p-3 flex gap-2">
           <input
-            className="flex-1 p-2 bg-white/20"
-            placeholder="Ask something..."
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-          />
+  className="flex-1 p-2 bg-white/20"
+  placeholder="Ask something..."
+  value={question}
+  onChange={(e) => setQuestion(e.target.value)}
+
+  // 🔥 ENTER TO SEND
+  onKeyDown={(e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }}
+  />
           <button onClick={sendMessage} className="bg-blue-600 px-4">
             Send
           </button>
