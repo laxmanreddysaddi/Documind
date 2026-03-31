@@ -10,7 +10,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// 🔥 USER BASED TOKEN
+// ✅ Attach token per user
 api.interceptors.request.use((config) => {
   const currentUser = localStorage.getItem("currentUser");
   const token = currentUser
@@ -24,15 +24,15 @@ api.interceptors.request.use((config) => {
 export default function App() {
 
   // ================= AUTH =================
-  const currentUser = localStorage.getItem("currentUser");
+  const savedUser = localStorage.getItem("currentUser");
 
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState(currentUser || "");
+  const [username, setUsername] = useState(savedUser || "");
   const [password, setPassword] = useState("");
-
   const [token, setToken] = useState(
-    currentUser ? localStorage.getItem(`token_${currentUser}`) : ""
+    savedUser ? localStorage.getItem(`token_${savedUser}`) : ""
   );
+  const [authLoading, setAuthLoading] = useState(false);
 
   // ================= DATA =================
   const [documents, setDocuments] = useState([]);
@@ -46,6 +46,11 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const chatEndRef = useRef(null);
+
+  // ================= BACKEND WAKE-UP =================
+  useEffect(() => {
+    fetch(`${BASE_URL}/auth/login`, { method: "OPTIONS" }).catch(() => {});
+  }, []);
 
   // ================= AUTO SCROLL =================
   useEffect(() => {
@@ -133,6 +138,8 @@ export default function App() {
       return;
     }
 
+    setAuthLoading(true);
+
     try {
       const url = isLogin ? "/auth/login" : "/auth/register";
       const res = await api.post(url, { username, password });
@@ -141,18 +148,17 @@ export default function App() {
         const t = res.data.token || res.data;
 
         setToken(t);
-
         localStorage.setItem(`token_${username}`, t);
         localStorage.setItem("currentUser", username);
-
       } else {
         alert("Registered! Now login");
         setIsLogin(true);
       }
-
     } catch {
       alert("Auth failed");
     }
+
+    setAuthLoading(false);
   };
 
   // ================= CHAT =================
@@ -167,7 +173,6 @@ export default function App() {
     const q = question;
     setQuestion("");
 
-    // ✅ show immediately
     setMessages((prev) => [...prev, { role: "user", text: q }]);
     setLoading(true);
 
@@ -204,7 +209,6 @@ export default function App() {
     setLoading(false);
   };
 
-  // ================= ENTER =================
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -212,7 +216,6 @@ export default function App() {
     }
   };
 
-  // ================= LOGOUT =================
   const logout = () => {
     localStorage.removeItem("currentUser");
     setToken("");
@@ -223,44 +226,60 @@ export default function App() {
   // ================= LOGIN UI =================
   if (!token) {
     return (
-      <div className="flex h-screen bg-black text-white items-center justify-center">
-        <div className="bg-white/10 p-6 rounded w-80">
+      <div className="flex h-screen bg-gradient-to-br from-black to-gray-900">
 
-          <h2 className="text-xl mb-4 text-center">
-            {isLogin ? "Login" : "Register"}
-          </h2>
-
-          <input
-            className="w-full p-2 mb-3 bg-white/20"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-
-          <input
-            type="password"
-            className="w-full p-2 mb-3 bg-white/20"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <button
-            onClick={handleAuth}
-            className="w-full bg-blue-600 p-2"
-          >
-            {isLogin ? "Login" : "Register"}
-          </button>
-
-          <p
-            className="text-sm mt-3 text-center cursor-pointer text-blue-300"
-            onClick={() => setIsLogin(!isLogin)}
-          >
-            {isLogin
-              ? "New user? Register"
-              : "Already have account? Login"}
+        {/* LEFT SIDE */}
+        <div className="w-1/2 flex flex-col items-center justify-center text-white">
+          <h1 className="text-5xl font-bold mb-4">DocuMind AI</h1>
+          <p className="text-gray-400 text-center max-w-sm">
+            Smart document assistant powered by AI.
           </p>
+        </div>
 
+        {/* RIGHT SIDE */}
+        <div className="w-1/2 flex items-center justify-center">
+          <div className="backdrop-blur-xl bg-white/10 p-8 rounded-xl w-80 text-white">
+
+            <h2 className="text-2xl mb-6 text-center">
+              {isLogin ? "Login" : "Register"}
+            </h2>
+
+            <input
+              className="w-full p-2 mb-4 bg-white/20"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+
+            <input
+              type="password"
+              className="w-full p-2 mb-4 bg-white/20"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            <button
+              onClick={handleAuth}
+              className="w-full bg-blue-600 p-2 rounded"
+            >
+              {authLoading
+                ? "Please wait..."
+                : isLogin
+                ? "Login"
+                : "Register"}
+            </button>
+
+            <p
+              className="text-sm mt-4 text-center cursor-pointer text-blue-300"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              {isLogin
+                ? "New user? Register"
+                : "Already have account? Login"}
+            </p>
+
+          </div>
         </div>
       </div>
     );
@@ -270,14 +289,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-black text-white">
 
-      {/* HEADER */}
-      <div className="absolute top-0 w-full text-center p-3 font-bold text-xl bg-white/10">
-        DocuMind AI
-      </div>
-
-      {/* SIDEBAR */}
-      <div className="w-64 p-3 mt-12 bg-white/10">
-
+      <div className="w-64 p-3 bg-white/10">
         <button onClick={createSession}
           className="bg-blue-600 w-full p-2 mb-2">
           + New Chat
@@ -298,8 +310,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* CHAT */}
-      <div className="flex-1 flex flex-col mt-12">
+      <div className="flex-1 flex flex-col">
 
         <div className="flex-1 p-4 overflow-y-auto">
           {messages.map((m, i) => (
@@ -314,7 +325,7 @@ export default function App() {
         <div className="p-3 flex gap-2">
           <textarea
             className="flex-1 p-2 bg-white/20"
-            placeholder="Ask something..."   // ✅ ADDED
+            placeholder="Ask something..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
