@@ -23,6 +23,7 @@ export default function App() {
   const [username, setUsername] = useState(localStorage.getItem("username") || "");
   const [password, setPassword] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token") || "");
+  const [authLoading, setAuthLoading] = useState(false);
 
   // ================= DATA =================
   const [documents, setDocuments] = useState([]);
@@ -35,11 +36,17 @@ export default function App() {
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 🔥 NEW STATES
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
   const chatEndRef = useRef(null);
+
+  // ================= 🔥 WAKE BACKEND =================
+  useEffect(() => {
+    fetch("https://documind-backend-30m4.onrender.com/api/auth/login", {
+      method: "OPTIONS",
+    }).catch(() => {});
+  }, []);
 
   // ================= AUTO SCROLL =================
   useEffect(() => {
@@ -132,7 +139,14 @@ export default function App() {
 
   // ================= AUTH =================
   const handleAuth = async () => {
+    if (!username || !password) {
+      alert("Enter username & password");
+      return;
+    }
+
     try {
+      setAuthLoading(true);
+
       const url = isLogin ? "/auth/login" : "/auth/register";
       const res = await api.post(url, { username, password });
 
@@ -142,11 +156,14 @@ export default function App() {
         localStorage.setItem("token", t);
         localStorage.setItem("username", username);
       } else {
-        alert("Registered! Login now");
+        alert("Registered successfully! Now login");
         setIsLogin(true);
       }
+
     } catch {
       alert("Auth failed");
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -226,7 +243,7 @@ export default function App() {
     }
   };
 
-  // ================= 🔥 UPDATED UPLOAD =================
+  // ================= UPLOAD =================
   const uploadFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -293,10 +310,26 @@ export default function App() {
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button onClick={handleAuth}
-              className="w-full bg-blue-600 p-2 rounded">
-              {isLogin ? "Login" : "Register"}
+            <button
+              onClick={handleAuth}
+              disabled={authLoading}
+              className="w-full bg-blue-600 p-2 rounded"
+            >
+              {authLoading
+                ? "Please wait..."
+                : isLogin
+                ? "Login"
+                : "Register"}
             </button>
+
+            <p
+              className="text-sm text-center mt-4 cursor-pointer text-blue-300"
+              onClick={() => setIsLogin(!isLogin)}
+            >
+              {isLogin
+                ? "New user? Register"
+                : "Already have account? Login"}
+            </p>
           </div>
         </div>
       </div>
@@ -311,105 +344,65 @@ export default function App() {
       <div className="w-64 p-4 flex flex-col backdrop-blur-xl bg-white/10 border-r border-white/20">
 
         <button onClick={createSession}
-          className="bg-blue-600 p-2 rounded mb-3 hover:bg-blue-700">
+          className="bg-blue-600 p-2 rounded mb-3">
           + New Chat
         </button>
 
         <input type="file" onChange={uploadFile} />
 
-        {/* 🔥 UPLOAD UI */}
         {uploading && (
           <div className="mt-3">
             <div className="text-xs text-blue-300 mb-1">
-              ⏳ Uploading {uploadProgress}%
+              Uploading {uploadProgress}%
             </div>
-
             <div className="w-full h-2 bg-white/20 rounded">
-              <div
-                className="h-2 bg-blue-500 rounded transition-all"
-                style={{ width: `${uploadProgress}%` }}
-              />
+              <div className="h-2 bg-blue-500 rounded"
+                style={{ width: `${uploadProgress}%` }} />
             </div>
-
-            <p className="text-xs text-yellow-300 mt-1">
-              Processing document...
-            </p>
           </div>
         )}
 
-        {/* DOCUMENTS */}
         <div className="mt-3 space-y-2">
           {documents.map((d) => (
             <div key={d.id}
-              className={`p-2 rounded flex justify-between items-center ${
+              className={`p-2 rounded flex justify-between ${
                 selectedDocId == d.id ? "bg-blue-500/40" : "bg-white/10"
-              }`}
-            >
-              <span className="cursor-pointer flex-1"
-                onClick={() => setSelectedDocId(d.id)}>
+              }`}>
+              <span onClick={() => setSelectedDocId(d.id)}>
                 {d.fileName}
               </span>
-
-              <button onClick={() => deleteDocument(d.id)}
-                className="text-red-400">
-                🗑
-              </button>
-            </div>
-          ))}
-        </div>
-
-        {/* SESSIONS */}
-        <div className="mt-3 space-y-2">
-          {sessions.map((s) => (
-            <div key={s.id}
-              onClick={() => setSelectedSessionId(s.id)}
-              className={`p-2 rounded cursor-pointer ${
-                selectedSessionId === s.id ? "bg-blue-500/40" : "bg-white/10"
-              }`}
-            >
-              {s.name || "New Chat"}
+              <button onClick={() => deleteDocument(d.id)}>🗑</button>
             </div>
           ))}
         </div>
 
         <button onClick={logout}
-          className="mt-auto bg-red-600 p-2 rounded hover:bg-red-700">
+          className="mt-auto bg-red-600 p-2 rounded">
           Logout
         </button>
       </div>
 
       {/* CHAT */}
       <div className="flex-1 flex flex-col">
-        <div className="flex-1 p-4 overflow-y-auto space-y-3">
-
+        <div className="flex-1 p-4 overflow-y-auto">
           {messages.map((m, i) => (
-            <div key={i}
-              className={`p-3 rounded-xl max-w-xl ${
-                m.role === "user"
-                  ? "bg-blue-500/40 ml-auto"
-                  : "bg-white/10"
-              }`}
-            >
+            <div key={i} className="p-2 mb-2 bg-white/10 rounded">
               {m.text}
             </div>
           ))}
-
           {loading && <p>Thinking...</p>}
           <div ref={chatEndRef}></div>
         </div>
 
-        <div className="p-3 flex gap-2 backdrop-blur-xl bg-white/10">
+        <div className="p-3 flex gap-2 bg-white/10">
           <textarea
-            className="flex-1 p-2 rounded bg-white/20 text-white resize-none"
+            className="flex-1 p-2 rounded bg-white/20"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask something..."
-            rows={2}
           />
-
           <button onClick={sendMessage}
-            className="px-6 bg-blue-600 rounded hover:bg-blue-700">
+            className="bg-blue-600 px-4 rounded">
             Send
           </button>
         </div>
