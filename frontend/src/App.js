@@ -10,8 +10,9 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// 🔥 USE SESSION STORAGE (FIX USER LEAK ISSUE)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = sessionStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -20,9 +21,9 @@ export default function App() {
 
   // ================= AUTH =================
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState(localStorage.getItem("username") || "");
+  const [username, setUsername] = useState(sessionStorage.getItem("username") || "");
   const [password, setPassword] = useState("");
-  const [token, setToken] = useState(localStorage.getItem("token") || "");
+  const [token, setToken] = useState(sessionStorage.getItem("token") || "");
   const [authLoading, setAuthLoading] = useState(false);
 
   // ================= DATA =================
@@ -153,8 +154,11 @@ export default function App() {
       if (isLogin) {
         const t = res.data.token || res.data;
         setToken(t);
-        localStorage.setItem("token", t);
-        localStorage.setItem("username", username);
+
+        // 🔥 SESSION STORAGE
+        sessionStorage.setItem("token", t);
+        sessionStorage.setItem("username", username);
+
       } else {
         alert("Registered successfully! Now login");
         setIsLogin(true);
@@ -277,7 +281,7 @@ export default function App() {
 
   // ================= LOGOUT =================
   const logout = () => {
-    localStorage.clear();
+    sessionStorage.clear();
     setToken("");
     setMessages([]);
     setDocuments([]);
